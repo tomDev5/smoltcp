@@ -62,7 +62,7 @@ fn main() {
     let udp_rx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 1024]);
     let udp_tx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY], vec![0; 0]);
     let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
-    let udp_handle = sockets.add(udp_socket);
+    let udp_handle = sockets.add(udp_socket).expect("Failed to add socket");
 
     // Join a multicast group
     iface

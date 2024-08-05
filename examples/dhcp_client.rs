@@ -48,7 +48,7 @@ fn main() {
     dhcp_socket.set_max_lease_duration(Some(Duration::from_secs(10)));
 
     let mut sockets = SocketSet::new(vec![]);
-    let dhcp_handle = sockets.add(dhcp_socket);
+    let dhcp_handle = sockets.add(dhcp_socket).expect("Failed to add socket");
 
     loop {
         let timestamp = Instant::now();

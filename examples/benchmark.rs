@@ -103,8 +103,8 @@ fn main() {
     });
 
     let mut sockets = SocketSet::new(vec![]);
-    let tcp1_handle = sockets.add(tcp1_socket);
-    let tcp2_handle = sockets.add(tcp2_socket);
+    let tcp1_handle = sockets.add(tcp1_socket).expect("Failed to add socket");
+    let tcp2_handle = sockets.add(tcp2_socket).expect("Failed to add socket");
     let default_timeout = Some(Duration::from_millis(1000));
 
     thread::spawn(move || client(mode));

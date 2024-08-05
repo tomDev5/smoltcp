@@ -99,8 +99,8 @@ fn main() {
     let tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 
     let mut sockets = SocketSet::new(vec![]);
-    let udp_handle = sockets.add(udp_socket);
-    let tcp_handle = sockets.add(tcp_socket);
+    let udp_handle = sockets.add(udp_socket).expect("Failed to add socket");
+    let tcp_handle = sockets.add(tcp_socket).expect("Failed to add socket");
 
     let socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
     socket.listen(50000).unwrap();

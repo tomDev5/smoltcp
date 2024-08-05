@@ -62,7 +62,7 @@ fn main() {
     let dns_socket = dns::Socket::new(servers, vec![]);
 
     let mut sockets = SocketSet::new(vec![]);
-    let dns_handle = sockets.add(dns_socket);
+    let dns_handle = sockets.add(dns_socket).expect("Failed to add socket");
 
     let socket = sockets.get_mut::<dns::Socket>(dns_handle);
     let query = socket

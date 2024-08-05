@@ -1,8 +1,12 @@
 use core::fmt;
 use managed::ManagedSlice;
 
-use super::socket_meta::Meta;
+use super::{dispatch_table::DispatchTable, socket_meta::Meta};
+#[cfg(any(feature = "std"))]
+use crate::iface::dispatch_table;
 use crate::socket::{AnySocket, Socket};
+#[cfg(feature = "std")]
+use std::collections::HashSet;
 
 /// Opaque struct with space for storing one socket.
 ///
@@ -43,6 +47,15 @@ impl fmt::Display for SocketHandle {
 #[derive(Debug)]
 pub struct SocketSet<'a> {
     sockets: ManagedSlice<'a, SocketStorage<'a>>,
+    #[cfg(any(feature = "std"))]
+    dispatch_table: DispatchTable,
+    #[cfg(any(feature = "std"))]
+    dirty_sockets: HashSet<SocketHandle>,
+}
+
+#[derive(Debug)]
+pub enum Error {
+    SocketEndpointAlreadyInUse,
 }
 
 impl<'a> SocketSet<'a> {
@@ -52,24 +65,43 @@ impl<'a> SocketSet<'a> {
         SocketsT: Into<ManagedSlice<'a, SocketStorage<'a>>>,
     {
         let sockets = sockets.into();
-        SocketSet { sockets }
+        SocketSet {
+            sockets,
+            #[cfg(any(feature = "std"))]
+            dispatch_table: DispatchTable::default(),
+            #[cfg(any(feature = "std"))]
+            dirty_sockets: HashSet::default(),
+        }
     }
 
     /// Add a socket to the set, and return its handle.
     ///
     /// # Panics
     /// This function panics if the storage is fixed-size (not a `Vec`) and is full.
-    pub fn add<T: AnySocket<'a>>(&mut self, socket: T) -> SocketHandle {
-        fn put<'a>(index: usize, slot: &mut SocketStorage<'a>, socket: Socket<'a>) -> SocketHandle {
+    pub fn add<T: AnySocket<'a>>(&mut self, socket: T) -> Result<SocketHandle, Error> {
+        let mut put = |index: usize,
+                       slot: &mut SocketStorage<'a>,
+                       socket: Socket<'a>|
+         -> Result<SocketHandle, Error> {
             net_trace!("[{}]: adding", index);
             let handle = SocketHandle(index);
             let mut meta = Meta::default();
             meta.handle = handle;
-            *slot = SocketStorage {
-                inner: Some(Item { meta, socket }),
-            };
-            handle
-        }
+
+            #[cfg(any(feature = "std"))]
+            match self.dispatch_table.add_socket(&socket, handle) {
+                Ok(()) => {
+                    *slot = SocketStorage {
+                        inner: Some(Item { meta, socket }),
+                    };
+
+                    Ok(handle)
+                }
+                Err(dispatch_table::AddError::AlreadyInUse) => {
+                    return Err(Error::SocketEndpointAlreadyInUse)
+                }
+            }
+        };
 
         let socket = socket.upcast();
 
@@ -85,7 +117,13 @@ impl<'a> SocketSet<'a> {
             ManagedSlice::Owned(sockets) => {
                 sockets.push(SocketStorage { inner: None });
                 let index = sockets.len() - 1;
-                put(index, &mut sockets[index], socket)
+                match put(index, &mut sockets[index], socket) {
+                    Ok(handle) => Ok(handle),
+                    Err(Error::SocketEndpointAlreadyInUse) => {
+                        sockets.pop();
+                        Err(Error::SocketEndpointAlreadyInUse)
+                    }
+                }
             }
         }
     }
@@ -123,11 +161,28 @@ impl<'a> SocketSet<'a> {
     /// This function may panic if the handle does not belong to this socket set.
     pub fn remove(&mut self, handle: SocketHandle) -> Socket<'a> {
         net_trace!("[{}]: removing", handle.0);
-        match self.sockets[handle.0].inner.take() {
+        let socket = match self.sockets[handle.0].inner.take() {
             Some(item) => item.socket,
             None => panic!("handle does not refer to a valid socket"),
+        };
+
+        #[cfg(any(feature = "std"))]
+        match self.dispatch_table.remove_socket(&socket, handle) {
+            Ok(()) => {
+                self.dirty_sockets.remove(&handle);
+            }
+            Err(dispatch_table::RemoveError::SocketNotFound) => {
+                panic!("handle does not refer to a valid dispatch item")
+            }
         }
+
+        socket
     }
+
+    // tomtodo:
+    // socket tracker
+    // pub fn next_dirty, pub fn dirty_iter
+    // then remove the iter functions below and handle the code
 
     /// Get an iterator to the inner sockets.
     pub fn iter(&self) -> impl Iterator<Item = (SocketHandle, &Socket<'a>)> {

@@ -52,8 +52,8 @@ fn main() {
 
     let mut sockets: [_; 2] = Default::default();
     let mut sockets = SocketSet::new(&mut sockets[..]);
-    let server_handle = sockets.add(server_socket);
-    let client_handle = sockets.add(client_socket);
+    let server_handle = sockets.add(server_socket).expect("Failed to add socket");
+    let client_handle = sockets.add(client_socket).expect("Failed to add socket");
 
     let start_time = Instant::now();
 

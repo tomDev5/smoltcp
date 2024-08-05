@@ -83,11 +83,11 @@ fn main() {
     let tcp4_socket = tcp::Socket::new(tcp4_rx_buffer, tcp4_tx_buffer);
 
     let mut sockets = SocketSet::new(vec![]);
-    let udp_handle = sockets.add(udp_socket);
-    let tcp1_handle = sockets.add(tcp1_socket);
-    let tcp2_handle = sockets.add(tcp2_socket);
-    let tcp3_handle = sockets.add(tcp3_socket);
-    let tcp4_handle = sockets.add(tcp4_socket);
+    let udp_handle = sockets.add(udp_socket).expect("Failed to add socket");
+    let tcp1_handle = sockets.add(tcp1_socket).expect("Failed to add socket");
+    let tcp2_handle = sockets.add(tcp2_socket).expect("Failed to add socket");
+    let tcp3_handle = sockets.add(tcp3_socket).expect("Failed to add socket");
+    let tcp4_handle = sockets.add(tcp4_socket).expect("Failed to add socket");
 
     let mut tcp_6970_active = false;
     loop {

@@ -140,7 +140,7 @@ fn main() {
     let icmp_tx_buffer = icmp::PacketBuffer::new(vec![icmp::PacketMetadata::EMPTY], vec![0; 256]);
     let icmp_socket = icmp::Socket::new(icmp_rx_buffer, icmp_tx_buffer);
     let mut sockets = SocketSet::new(vec![]);
-    let icmp_handle = sockets.add(icmp_socket);
+    let icmp_handle = sockets.add(icmp_socket).expect("Failed to add socket");
 
     let mut send_at = Instant::from_millis(0);
     let mut seq_no = 0;

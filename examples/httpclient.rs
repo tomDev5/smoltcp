@@ -65,7 +65,7 @@ fn main() {
     let tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 
     let mut sockets = SocketSet::new(vec![]);
-    let tcp_handle = sockets.add(tcp_socket);
+    let tcp_handle = sockets.add(tcp_socket).expect("Failed to add socket");
 
     enum State {
         Connect,
