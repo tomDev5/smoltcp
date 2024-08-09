@@ -11,6 +11,14 @@ mod neighbor;
 mod route;
 #[cfg(feature = "proto-rpl")]
 mod rpl;
+#[cfg(feature = "std")]
+mod socket_dispatch;
+#[cfg(feature = "std")]
+pub(crate) use self::socket_dispatch::DispatchTable;
+#[cfg(not(feature = "std"))]
+mod socket_dispatch_nostd;
+#[cfg(not(feature = "std"))]
+pub(crate) use self::socket_dispatch_nostd::DispatchTable;
 mod socket_meta;
 mod socket_set;
 
