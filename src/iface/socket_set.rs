@@ -175,15 +175,6 @@ impl<'a> SocketSet<'a> {
         Some(tracker)
     }
 
-    pub(crate) fn get_tcp_socket(
-        &self,
-        ip_repr: &crate::wire::IpRepr,
-        tcp_repr: &crate::wire::TcpRepr,
-    ) -> Option<&crate::socket::tcp::Socket<'a>> {
-        let handle: SocketHandle = self.dispatch_table.get_tcp_socket(ip_repr, tcp_repr)?;
-        Some(self.get(handle))
-    }
-
     pub(crate) fn get_mut_udp_socket(
         &mut self,
         ip_repr: &crate::wire::IpRepr,
@@ -203,15 +194,6 @@ impl<'a> SocketSet<'a> {
             socket,
         );
         Some(tracker)
-    }
-
-    pub(crate) fn get_udp_socket(
-        &self,
-        ip_repr: &crate::wire::IpRepr,
-        udp_repr: &crate::wire::UdpRepr,
-    ) -> Option<&crate::socket::udp::Socket<'a>> {
-        let handle: SocketHandle = self.dispatch_table.get_udp_socket(ip_repr, udp_repr)?;
-        Some(self.get(handle))
     }
 
     pub(crate) fn get_mut_raw_socket(
@@ -235,16 +217,5 @@ impl<'a> SocketSet<'a> {
             socket,
         );
         Some(tracker)
-    }
-
-    pub(crate) fn get_raw_socket(
-        &self,
-        ip_version: crate::wire::IpVersion,
-        ip_protocol: crate::wire::IpProtocol,
-    ) -> Option<&crate::socket::raw::Socket<'a>> {
-        let handle: SocketHandle = self
-            .dispatch_table
-            .get_raw_socket(ip_version, ip_protocol)?;
-        Some(self.get(handle))
     }
 }

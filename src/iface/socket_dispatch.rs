@@ -3,10 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound::Included;
 
 use crate::socket::{raw, tcp, udp};
-use crate::{
-    socket::AnySocket,
-    wire::{IpAddress, IpEndpoint, IpProtocol, IpVersion},
-};
+use crate::wire::{IpAddress, IpEndpoint, IpProtocol, IpVersion};
 
 use super::SocketHandle;
 

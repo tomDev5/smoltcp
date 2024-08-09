@@ -807,13 +807,14 @@ impl InterfaceInner {
         let mut handled_by_raw_socket = false;
 
         // Pass every IP packet to all raw sockets we have registered.
-        for raw_socket in sockets
-            .items_mut()
-            .filter_map(|i| raw::Socket::downcast_mut(&mut i.socket))
+        if let Some(mut raw_socket) =
+            sockets.get_mut_raw_socket(ip_repr.version(), ip_repr.next_header())
         {
             if raw_socket.accepts(ip_repr) {
                 raw_socket.process(self, ip_repr, ip_payload);
                 handled_by_raw_socket = true;
+            } else {
+                panic!("should never get here")
             }
         }
         handled_by_raw_socket

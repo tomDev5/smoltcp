@@ -3,9 +3,6 @@ use super::*;
 #[cfg(feature = "socket-dns")]
 use crate::socket::dns::Socket as DnsSocket;
 
-#[cfg(feature = "socket-udp")]
-use crate::socket::udp::Socket as UdpSocket;
-
 impl InterfaceInner {
     pub(super) fn process_udp<'frame>(
         &mut self,
@@ -25,13 +22,12 @@ impl InterfaceInner {
         ));
 
         #[cfg(feature = "socket-udp")]
-        for udp_socket in sockets
-            .items_mut()
-            .filter_map(|i| UdpSocket::downcast_mut(&mut i.socket))
-        {
+        if let Some(mut udp_socket) = sockets.get_mut_udp_socket(&ip_repr, &udp_repr) {
             if udp_socket.accepts(self, &ip_repr, &udp_repr) {
                 udp_socket.process(self, meta, &ip_repr, &udp_repr, udp_packet.payload());
                 return None;
+            } else {
+                panic!("should never get here")
             }
         }
 

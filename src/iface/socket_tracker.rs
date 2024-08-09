@@ -5,8 +5,7 @@ use std::{
 
 use crate::{
     socket::{raw, tcp, udp},
-    storage::RingBuffer,
-    wire::{IpEndpoint, IpListenEndpoint},
+    wire::IpListenEndpoint,
 };
 
 use super::{DispatchTable, SocketHandle};
