@@ -20,9 +20,9 @@ pub trait TrackedSocket {
     fn new_state(&self) -> Self::State;
     fn on_drop(
         &mut self,
-        state: &Self::State,
-        dispatch_table: &mut DispatchTable,
-        handle: SocketHandle,
+        _state: &Self::State,
+        _dispatch_table: &mut DispatchTable,
+        _handle: SocketHandle,
     ) {
     }
 

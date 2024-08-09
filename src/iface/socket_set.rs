@@ -1,8 +1,8 @@
 use core::fmt;
 use managed::ManagedSlice;
 
-use super::{socket_meta::Meta, DirtySockets, DispatchTable};
-use crate::socket::{AnySocket, Socket};
+use super::{socket_meta::Meta, socket_tracker::SocketTracker, DirtySockets, DispatchTable};
+use crate::socket::{raw, tcp, udp, AnySocket, Socket};
 
 /// Opaque struct with space for storing one socket.
 ///
@@ -44,7 +44,7 @@ impl fmt::Display for SocketHandle {
 pub struct SocketSet<'a> {
     sockets: ManagedSlice<'a, SocketStorage<'a>>,
     dispatch_table: DispatchTable,
-    dirty_socktes: DirtySockets,
+    dirty_sockets: DirtySockets,
 }
 
 impl<'a> SocketSet<'a> {
@@ -57,7 +57,7 @@ impl<'a> SocketSet<'a> {
         SocketSet {
             sockets,
             dispatch_table: DispatchTable::default(),
-            dirty_socktes: DirtySockets::default(),
+            dirty_sockets: DirtySockets::default(),
         }
     }
 
@@ -159,9 +159,20 @@ impl<'a> SocketSet<'a> {
         &mut self,
         ip_repr: &crate::wire::IpRepr,
         tcp_repr: &crate::wire::TcpRepr,
-    ) -> Option<&mut crate::socket::tcp::Socket<'a>> {
+    ) -> Option<SocketTracker<crate::socket::tcp::Socket<'a>>> {
         let handle: SocketHandle = self.dispatch_table.get_tcp_socket(ip_repr, tcp_repr)?;
-        Some(self.get_mut(handle))
+        let socket = match self.sockets[handle.0].inner.as_mut() {
+            Some(item) => tcp::Socket::downcast_mut(&mut item.socket)
+                .expect("handle refers to a socket of a wrong type"),
+            None => panic!("handle does not refer to a valid socket"),
+        };
+        let tracker = SocketTracker::new(
+            &mut self.dispatch_table,
+            &mut self.dirty_sockets,
+            handle,
+            socket,
+        );
+        Some(tracker)
     }
 
     pub(crate) fn get_tcp_socket(
@@ -176,18 +187,30 @@ impl<'a> SocketSet<'a> {
     pub(crate) fn get_mut_udp_socket(
         &mut self,
         ip_repr: &crate::wire::IpRepr,
-        tcp_repr: &crate::wire::UdpRepr,
-    ) -> Option<&mut crate::socket::tcp::Socket<'a>> {
-        let handle: SocketHandle = self.dispatch_table.get_udp_socket(ip_repr, tcp_repr)?;
-        Some(self.get_mut(handle))
+        udp_repr: &crate::wire::UdpRepr,
+    ) -> Option<SocketTracker<crate::socket::udp::Socket<'a>>> {
+        let handle: SocketHandle = self.dispatch_table.get_udp_socket(ip_repr, udp_repr)?;
+
+        let socket = match self.sockets[handle.0].inner.as_mut() {
+            Some(item) => udp::Socket::downcast_mut(&mut item.socket)
+                .expect("handle refers to a socket of a wrong type"),
+            None => panic!("handle does not refer to a valid socket"),
+        };
+        let tracker = SocketTracker::new(
+            &mut self.dispatch_table,
+            &mut self.dirty_sockets,
+            handle,
+            socket,
+        );
+        Some(tracker)
     }
 
     pub(crate) fn get_udp_socket(
         &self,
         ip_repr: &crate::wire::IpRepr,
-        tcp_repr: &crate::wire::UdpRepr,
+        udp_repr: &crate::wire::UdpRepr,
     ) -> Option<&crate::socket::udp::Socket<'a>> {
-        let handle: SocketHandle = self.dispatch_table.get_udp_socket(ip_repr, tcp_repr)?;
+        let handle: SocketHandle = self.dispatch_table.get_udp_socket(ip_repr, udp_repr)?;
         Some(self.get(handle))
     }
 
@@ -195,11 +218,23 @@ impl<'a> SocketSet<'a> {
         &mut self,
         ip_version: crate::wire::IpVersion,
         ip_protocol: crate::wire::IpProtocol,
-    ) -> Option<&mut crate::socket::raw::Socket<'a>> {
+    ) -> Option<SocketTracker<crate::socket::raw::Socket<'a>>> {
         let handle: SocketHandle = self
             .dispatch_table
             .get_raw_socket(ip_version, ip_protocol)?;
-        Some(self.get_mut(handle))
+
+        let socket = match self.sockets[handle.0].inner.as_mut() {
+            Some(item) => raw::Socket::downcast_mut(&mut item.socket)
+                .expect("handle refers to a socket of a wrong type"),
+            None => panic!("handle does not refer to a valid socket"),
+        };
+        let tracker = SocketTracker::new(
+            &mut self.dispatch_table,
+            &mut self.dirty_sockets,
+            handle,
+            socket,
+        );
+        Some(tracker)
     }
 
     pub(crate) fn get_raw_socket(
