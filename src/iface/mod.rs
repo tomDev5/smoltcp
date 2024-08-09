@@ -15,8 +15,14 @@ mod rpl;
 mod socket_dispatch;
 #[cfg(feature = "std")]
 pub(crate) use self::socket_dispatch::DispatchTable;
+#[cfg(feature = "std")]
+type DirtySockets = std::collections::BTreeSet<SocketHandle>;
+#[cfg(not(feature = "std"))]
+type DirtySockets = ();
 #[cfg(not(feature = "std"))]
 mod socket_dispatch_nostd;
+#[cfg(feature = "std")]
+mod socket_tracker;
 #[cfg(not(feature = "std"))]
 pub(crate) use self::socket_dispatch_nostd::DispatchTable;
 mod socket_meta;

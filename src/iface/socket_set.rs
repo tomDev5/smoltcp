@@ -1,7 +1,7 @@
 use core::fmt;
 use managed::ManagedSlice;
 
-use super::{socket_meta::Meta, DispatchTable};
+use super::{socket_meta::Meta, DirtySockets, DispatchTable};
 use crate::socket::{AnySocket, Socket};
 
 /// Opaque struct with space for storing one socket.
@@ -44,6 +44,7 @@ impl fmt::Display for SocketHandle {
 pub struct SocketSet<'a> {
     sockets: ManagedSlice<'a, SocketStorage<'a>>,
     dispatch_table: DispatchTable,
+    dirty_socktes: DirtySockets,
 }
 
 impl<'a> SocketSet<'a> {
@@ -56,6 +57,7 @@ impl<'a> SocketSet<'a> {
         SocketSet {
             sockets,
             dispatch_table: DispatchTable::default(),
+            dirty_socktes: DirtySockets::default(),
         }
     }
 
