@@ -1,12 +1,19 @@
 use core::fmt;
 use managed::ManagedSlice;
 
-use super::{dispatch_table::DispatchTable, socket_meta::Meta};
+use super::{
+    dispatch_table::DispatchTable,
+    socket_meta::Meta,
+    socket_tracker::{SocketTracker, TrackedSocket},
+};
 #[cfg(any(feature = "std"))]
 use crate::iface::dispatch_table;
-use crate::socket::{AnySocket, Socket};
+use crate::{
+    socket::{raw, tcp, udp, AnySocket, Socket},
+    wire::{IpEndpoint, IpProtocol, IpVersion},
+};
 #[cfg(feature = "std")]
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// Opaque struct with space for storing one socket.
 ///
@@ -50,7 +57,7 @@ pub struct SocketSet<'a> {
     #[cfg(any(feature = "std"))]
     dispatch_table: DispatchTable,
     #[cfg(any(feature = "std"))]
-    dirty_sockets: HashSet<SocketHandle>,
+    dirty_sockets: BTreeSet<SocketHandle>,
 }
 
 #[derive(Debug)]
@@ -70,7 +77,7 @@ impl<'a> SocketSet<'a> {
             #[cfg(any(feature = "std"))]
             dispatch_table: DispatchTable::default(),
             #[cfg(any(feature = "std"))]
-            dirty_sockets: HashSet::default(),
+            dirty_sockets: BTreeSet::default(),
         }
     }
 
@@ -155,6 +162,27 @@ impl<'a> SocketSet<'a> {
         }
     }
 
+    /// Get a mutable socket from the set by its handle, as mutable.
+    ///
+    /// # Panics
+    /// This function may panic if the handle does not belong to this socket set
+    /// or the socket has the wrong type.
+    pub fn get_mut_tracked<T: AnySocket<'a> + TrackedSocket>(
+        &mut self,
+        handle: SocketHandle,
+    ) -> SocketTracker<T> {
+        match self.sockets[handle.0].inner.as_mut() {
+            Some(item) => SocketTracker::new(
+                &mut self.dispatch_table,
+                &mut self.dirty_sockets,
+                handle,
+                T::downcast_mut(&mut item.socket)
+                    .expect("handle refers to a socket of a wrong type"),
+            ),
+            None => panic!("handle does not refer to a valid socket"),
+        }
+    }
+
     /// Remove a socket from the set, without changing its state.
     ///
     /// # Panics
@@ -179,10 +207,59 @@ impl<'a> SocketSet<'a> {
         socket
     }
 
-    // tomtodo:
-    // socket tracker
-    // pub fn next_dirty, pub fn dirty_iter
-    // then remove the iter functions below and handle the code
+    pub(crate) fn get_raw_socket(
+        &'a mut self,
+        ip_version: IpVersion,
+        ip_protocol: IpProtocol,
+    ) -> Option<SocketTracker<'a, raw::Socket<'a>>> {
+        let handle = self
+            .dispatch_table
+            .get_raw_socket(ip_version, ip_protocol)?;
+
+        Some(self.get_mut_tracked::<raw::Socket>(handle))
+    }
+
+    pub(crate) fn get_udp_socket(
+        &'a mut self,
+        endpoint: IpEndpoint,
+    ) -> Option<SocketTracker<'a, udp::Socket<'a>>> {
+        let handle = self.dispatch_table.get_udp_socket(endpoint)?;
+
+        Some(self.get_mut_tracked::<udp::Socket>(handle))
+    }
+
+    pub(crate) fn get_tcp_socket(
+        &'a mut self,
+        local_endpoint: IpEndpoint,
+        remote_endpoint: Option<IpEndpoint>,
+    ) -> Option<SocketTracker<'a, tcp::Socket<'a>>> {
+        let handle = self
+            .dispatch_table
+            .get_tcp_socket(local_endpoint, remote_endpoint)?;
+
+        Some(self.get_mut_tracked::<tcp::Socket>(handle))
+    }
+
+    fn next_dirty<'b, T: AnySocket<'a> + TrackedSocket>(
+        &'b mut self,
+    ) -> Option<SocketTracker<'b, T>>
+    where
+        'a: 'b,
+    {
+        let handle = self.dirty_sockets.pop_first()?;
+        let socket = match self.sockets[handle.0].inner.as_mut() {
+            Some(item) => T::downcast_mut(&mut item.socket)
+                .expect("handle refers to a socket of a wrong type"),
+            None => panic!("handle does not refer to a valid socket"),
+        };
+        socket.set_on_dirty_list(false);
+        Some(SocketTracker::new(
+            &mut self.dispatch_table,
+            &mut self.dirty_sockets,
+            handle,
+            socket,
+        ))
+    }
 
     /// Get an iterator to the inner sockets.
     pub fn iter(&self) -> impl Iterator<Item = (SocketHandle, &Socket<'a>)> {

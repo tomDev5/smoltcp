@@ -15,6 +15,8 @@ mod route;
 mod rpl;
 mod socket_meta;
 mod socket_set;
+#[cfg(any(feature = "std"))]
+mod socket_tracker;
 
 mod packet;
 
