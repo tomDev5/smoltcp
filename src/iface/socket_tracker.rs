@@ -1,10 +1,11 @@
+use core::fmt::Debug;
 use std::{
     collections::BTreeSet,
     ops::{Deref, DerefMut},
 };
 
 use crate::{
-    socket::{raw, tcp, udp},
+    socket::{dhcpv4, dns, icmp, raw, tcp, udp},
     wire::IpListenEndpoint,
 };
 
@@ -14,7 +15,7 @@ use super::{DispatchTable, SocketHandle};
 ///
 /// Used for upkeep of dispatching tables.
 pub trait TrackedSocket {
-    type State;
+    type State: Debug;
 
     fn new_state(&self) -> Self::State;
     fn on_drop(
@@ -63,11 +64,14 @@ impl<'a> TrackedSocket for udp::Socket<'a> {
         dispatch_table: &mut DispatchTable,
         handle: SocketHandle,
     ) {
+        net_trace!("udp on_drop old state: {:?}", old_endpoint);
+        net_trace!("udp on_drop state: {:?}", self.endpoint());
         if old_endpoint != self.endpoint() {
             if old_endpoint.is_specified() {
                 let res = dispatch_table.remove_udp_socket(handle);
                 debug_assert!(res.is_ok());
             }
+            net_trace!("add_udp_socket");
             let res = dispatch_table.add_udp_socket(self, handle);
             debug_assert!(res.is_ok());
         }
@@ -135,6 +139,62 @@ impl<'a> TrackedSocket for tcp::Socket<'a> {
     }
 }
 
+/// These sockets do not yet have dispatch tables, TrackedSocket implementation is empty
+
+impl<'a> TrackedSocket for icmp::Socket<'a> {
+    type State = ();
+
+    fn new_state(&self) -> Self::State {
+        ()
+    }
+
+    fn is_dirty(&self) -> bool {
+        false
+    }
+
+    fn is_on_dirty_list(&self) -> bool {
+        false
+    }
+
+    fn set_on_dirty_list(&mut self, _is_dirty: bool) {}
+}
+
+impl<'a> TrackedSocket for dhcpv4::Socket<'a> {
+    type State = ();
+
+    fn new_state(&self) -> Self::State {
+        ()
+    }
+
+    fn is_dirty(&self) -> bool {
+        false
+    }
+
+    fn is_on_dirty_list(&self) -> bool {
+        false
+    }
+
+    fn set_on_dirty_list(&mut self, _is_dirty: bool) {}
+}
+
+impl<'a> TrackedSocket for dns::Socket<'a> {
+    type State = ();
+
+    fn new_state(&self) -> Self::State {
+        ()
+    }
+
+    fn is_dirty(&self) -> bool {
+        false
+    }
+
+    fn is_on_dirty_list(&self) -> bool {
+        false
+    }
+
+    fn set_on_dirty_list(&mut self, _is_dirty: bool) {}
+}
+
 /// A tracking smart-pointer to a socket.
 ///
 /// Implements `Deref` and `DerefMut` to the socket it contains.
@@ -166,6 +226,7 @@ impl<'a, T: TrackedSocket + 'a> SocketTracker<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub enum SocketState<'a> {
     Raw(<raw::Socket<'a> as TrackedSocket>::State),
     Udp(<udp::Socket<'a> as TrackedSocket>::State),
@@ -234,6 +295,11 @@ impl<'a> TrackedSocket for crate::socket::Socket<'a> {
 
 impl<'a, T: TrackedSocket + 'a> Drop for SocketTracker<'a, T> {
     fn drop(&mut self) {
+        net_trace!(
+            "dropping tracked socket - old state: {:?}, new state: {:?}",
+            self.state,
+            self.socket.new_state()
+        );
         self.socket
             .on_drop(&self.state, self.dispatch_table, self.handle);
         if !TrackedSocket::is_on_dirty_list(self.socket) && TrackedSocket::is_dirty(self.socket) {

@@ -116,10 +116,12 @@ fn test_handle_udp_broadcast(#[case] medium: Medium) {
     let dst_addr = ip_repr.dst_addr();
 
     // Bind the socket to port 68
-    let socket = sockets.get_mut::<udp::Socket>(socket_handle);
-    assert_eq!(socket.bind(68), Ok(()));
-    assert!(!socket.can_recv());
-    assert!(socket.can_send());
+    {
+        let mut socket = sockets.get_mut::<udp::Socket>(socket_handle);
+        assert_eq!(socket.bind(68), Ok(()));
+        assert!(!socket.can_recv());
+        assert!(socket.can_send());
+    }
 
     udp_repr.emit(
         &mut packet,
@@ -144,7 +146,7 @@ fn test_handle_udp_broadcast(#[case] medium: Medium) {
 
     // Make sure the payload to the UDP packet processed by process_udp is
     // appended to the bound sockets rx_buffer
-    let socket = sockets.get_mut::<udp::Socket>(socket_handle);
+    let mut socket = sockets.get_mut::<udp::Socket>(socket_handle);
     assert!(socket.can_recv());
     assert_eq!(
         socket.recv(),

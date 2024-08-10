@@ -1,7 +1,11 @@
 use core::fmt;
 use managed::ManagedSlice;
 
-use super::{socket_meta::Meta, socket_tracker::SocketTracker, DirtySockets, DispatchTable};
+use super::{
+    socket_meta::Meta,
+    socket_tracker::{SocketTracker, TrackedSocket},
+    DirtySockets, DispatchTable,
+};
 use crate::socket::{raw, tcp, udp, AnySocket, Socket};
 
 /// Opaque struct with space for storing one socket.
@@ -145,12 +149,23 @@ impl<'a> SocketSet<'a> {
     /// # Panics
     /// This function may panic if the handle does not belong to this socket set
     /// or the socket has the wrong type.
-    pub fn get_mut<T: AnySocket<'a>>(&mut self, handle: SocketHandle) -> &mut T {
-        match self.sockets[handle.0].inner.as_mut() {
-            Some(item) => T::downcast_mut(&mut item.socket)
-                .expect("handle refers to a socket of a wrong type"),
-            None => panic!("handle does not refer to a valid socket"),
-        }
+    pub fn get_mut<T: AnySocket<'a> + TrackedSocket>(
+        &mut self,
+        handle: SocketHandle,
+    ) -> SocketTracker<T> {
+        let Some(item) = self.sockets[handle.0].inner.as_mut() else {
+            panic!("handle does not refer to a valid socket");
+        };
+
+        let socket =
+            T::downcast_mut(&mut item.socket).expect("handle refers to a socket of a wrong type");
+
+        SocketTracker::new(
+            &mut self.dispatch_table,
+            &mut self.dirty_sockets,
+            handle,
+            socket,
+        )
     }
 
     /// Remove a socket from the set, without changing its state.
@@ -159,10 +174,20 @@ impl<'a> SocketSet<'a> {
     /// This function may panic if the handle does not belong to this socket set.
     pub fn remove(&mut self, handle: SocketHandle) -> Socket<'a> {
         net_trace!("[{}]: removing", handle.0);
-        match self.sockets[handle.0].inner.take() {
-            Some(item) => item.socket,
-            None => panic!("handle does not refer to a valid socket"),
+        let Some(item) = self.sockets[handle.0].inner.take() else {
+            panic!("handle does not refer to a valid socket");
+        };
+
+        let socket = item.socket;
+
+        match socket {
+            Socket::Raw(_) => self.dispatch_table.remove_raw_socket(handle).unwrap(),
+            Socket::Udp(_) => self.dispatch_table.remove_udp_socket(handle).unwrap(),
+            Socket::Tcp(_) => self.dispatch_table.remove_tcp_socket(handle).unwrap(),
+            _ => {}
         }
+
+        socket
     }
 
     /// Get an iterator to the inner sockets.

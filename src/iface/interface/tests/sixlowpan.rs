@@ -313,7 +313,7 @@ fn test_sixlowpan_udp_with_fragmentation() {
     let udp_socket_handle = sockets.add(udp_socket);
 
     {
-        let socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
+        let mut socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
         assert_eq!(socket.bind(6969), Ok(()));
         assert!(!socket.can_recv());
         assert!(socket.can_send());
@@ -360,57 +360,59 @@ fn test_sixlowpan_udp_with_fragmentation() {
         None
     );
 
-    let socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
+    {
+        let mut socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
 
-    let udp_data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
+        let udp_data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
 In at rhoncus tortor. Cras blandit tellus diam, varius vestibulum nibh commodo nec.";
-    assert_eq!(
-        socket.recv(),
-        Ok((
-            &udp_data[..],
-            udp::UdpMetadata {
-                local_address: Some(
-                    Ipv6Address([
-                        0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x92, 0xfc, 0x48, 0xc2, 0xa4,
-                        0x41, 0xfc, 0x76,
-                    ])
+        assert_eq!(
+            socket.recv(),
+            Ok((
+                &udp_data[..],
+                udp::UdpMetadata {
+                    local_address: Some(
+                        Ipv6Address([
+                            0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x92, 0xfc, 0x48, 0xc2, 0xa4,
+                            0x41, 0xfc, 0x76,
+                        ])
+                        .into()
+                    ),
+                    ..IpEndpoint {
+                        addr: IpAddress::Ipv6(Ipv6Address([
+                            0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x40, 0x42, 0x42, 0x42, 0x42,
+                            0x42, 0xb, 0x1a,
+                        ])),
+                        port: 54217,
+                    }
                     .into()
-                ),
-                ..IpEndpoint {
-                    addr: IpAddress::Ipv6(Ipv6Address([
-                        0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x40, 0x42, 0x42, 0x42, 0x42,
-                        0x42, 0xb, 0x1a,
-                    ])),
-                    port: 54217,
                 }
-                .into()
-            }
-        ))
-    );
+            ))
+        );
 
-    let tx_token = device.transmit(Instant::now()).unwrap();
-    iface.inner.dispatch_ieee802154(
-        Ieee802154Address::default(),
-        tx_token,
-        PacketMeta::default(),
-        Packet::new_ipv6(
-            Ipv6Repr {
-                src_addr: Ipv6Address::default(),
-                dst_addr: Ipv6Address::default(),
-                next_header: IpProtocol::Udp,
-                payload_len: udp_data.len(),
-                hop_limit: 64,
-            },
-            IpPayload::Udp(
-                UdpRepr {
-                    src_port: 1234,
-                    dst_port: 1234,
+        let tx_token = device.transmit(Instant::now()).unwrap();
+        iface.inner.dispatch_ieee802154(
+            Ieee802154Address::default(),
+            tx_token,
+            PacketMeta::default(),
+            Packet::new_ipv6(
+                Ipv6Repr {
+                    src_addr: Ipv6Address::default(),
+                    dst_addr: Ipv6Address::default(),
+                    next_header: IpProtocol::Udp,
+                    payload_len: udp_data.len(),
+                    hop_limit: 64,
                 },
-                udp_data,
+                IpPayload::Udp(
+                    UdpRepr {
+                        src_port: 1234,
+                        dst_port: 1234,
+                    },
+                    udp_data,
+                ),
             ),
-        ),
-        &mut iface.fragmenter,
-    );
+            &mut iface.fragmenter,
+        );
+    }
 
     iface.poll(Instant::now(), &mut device, &mut sockets);
 

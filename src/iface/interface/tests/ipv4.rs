@@ -604,9 +604,11 @@ fn test_icmpv4_socket(#[case] medium: Medium) {
     let seq_no = 0x5432;
     let echo_data = &[0xff; 16];
 
-    let socket = sockets.get_mut::<icmp::Socket>(socket_handle);
-    // Bind to the ID 0x1234
-    assert_eq!(socket.bind(icmp::Endpoint::Ident(ident)), Ok(()));
+    {
+        let mut socket = sockets.get_mut::<icmp::Socket>(socket_handle);
+        // Bind to the ID 0x1234
+        assert_eq!(socket.bind(icmp::Endpoint::Ident(ident)), Ok(()));
+    }
 
     // Ensure the ident we bound to and the ident of the packet are the same.
     let mut bytes = [0xff; 24];
@@ -649,7 +651,7 @@ fn test_icmpv4_socket(#[case] medium: Medium) {
         Some(Packet::new_ipv4(ipv4_reply, IpPayload::Icmpv4(echo_reply)))
     );
 
-    let socket = sockets.get_mut::<icmp::Socket>(socket_handle);
+    let mut socket = sockets.get_mut::<icmp::Socket>(socket_handle);
     assert!(socket.can_recv());
     assert_eq!(
         socket.recv(),
@@ -862,10 +864,12 @@ fn test_raw_socket_with_udp_socket(#[case] medium: Medium) {
     let udp_socket_handle = sockets.add(udp_socket);
 
     // Bind the socket to port 68
-    let socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
-    assert_eq!(socket.bind(68), Ok(()));
-    assert!(!socket.can_recv());
-    assert!(socket.can_send());
+    {
+        let mut socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
+        assert_eq!(socket.bind(68), Ok(()));
+        assert!(!socket.can_recv());
+        assert!(socket.can_send());
+    }
 
     let packets = 1;
     let raw_rx_buffer =
@@ -937,7 +941,7 @@ fn test_raw_socket_with_udp_socket(#[case] medium: Medium) {
     );
 
     // Make sure the UDP socket can still receive in presence of a Raw socket that handles UDP
-    let socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
+    let mut socket = sockets.get_mut::<udp::Socket>(udp_socket_handle);
     assert!(socket.can_recv());
     assert_eq!(
         socket.recv(),

@@ -66,51 +66,55 @@ fn main() {
     let mut sockets = SocketSet::new(vec![]);
     let tcp_handle = sockets.add(tcp_socket);
 
-    let socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
-    socket
-        .connect(iface.context(), (address, port), 49500)
-        .unwrap();
+    {
+        let mut socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
+        socket
+            .connect(iface.context(), (address, port), 49500)
+            .unwrap();
+    }
 
     let mut tcp_active = false;
     loop {
         let timestamp = Instant::now();
         iface.poll(timestamp, &mut device, &mut sockets);
 
-        let socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
-        if socket.is_active() && !tcp_active {
-            debug!("connected");
-        } else if !socket.is_active() && tcp_active {
-            debug!("disconnected");
-            break;
-        }
-        tcp_active = socket.is_active();
-
-        if socket.may_recv() {
-            let data = socket
-                .recv(|data| {
-                    let mut data = data.to_owned();
-                    if !data.is_empty() {
-                        debug!(
-                            "recv data: {:?}",
-                            str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)")
-                        );
-                        data = data.split(|&b| b == b'\n').collect::<Vec<_>>().concat();
-                        data.reverse();
-                        data.extend(b"\n");
-                    }
-                    (data.len(), data)
-                })
-                .unwrap();
-            if socket.can_send() && !data.is_empty() {
-                debug!(
-                    "send data: {:?}",
-                    str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)")
-                );
-                socket.send_slice(&data[..]).unwrap();
+        {
+            let mut socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
+            if socket.is_active() && !tcp_active {
+                debug!("connected");
+            } else if !socket.is_active() && tcp_active {
+                debug!("disconnected");
+                break;
             }
-        } else if socket.may_send() {
-            debug!("close");
-            socket.close();
+            tcp_active = socket.is_active();
+
+            if socket.may_recv() {
+                let data = socket
+                    .recv(|data| {
+                        let mut data = data.to_owned();
+                        if !data.is_empty() {
+                            debug!(
+                                "recv data: {:?}",
+                                str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)")
+                            );
+                            data = data.split(|&b| b == b'\n').collect::<Vec<_>>().concat();
+                            data.reverse();
+                            data.extend(b"\n");
+                        }
+                        (data.len(), data)
+                    })
+                    .unwrap();
+                if socket.can_send() && !data.is_empty() {
+                    debug!(
+                        "send data: {:?}",
+                        str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)")
+                    );
+                    socket.send_slice(&data[..]).unwrap();
+                }
+            } else if socket.may_send() {
+                debug!("close");
+                socket.close();
+            }
         }
 
         phy_wait(fd, iface.poll_delay(timestamp, &sockets)).expect("wait error");

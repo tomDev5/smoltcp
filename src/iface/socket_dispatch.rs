@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound::Included;
 
 use crate::socket::{raw, tcp, udp};
-use crate::wire::{IpAddress, IpEndpoint, IpProtocol, IpVersion};
+use crate::wire::{IpAddress, IpEndpoint, IpListenEndpoint, IpProtocol, IpVersion};
 
 use super::SocketHandle;
 
@@ -16,11 +16,11 @@ struct TcpLocalEndpoint {
 #[derive(Debug, Default)]
 pub struct DispatchTable {
     raw: BTreeMap<(IpVersion, IpProtocol), SocketHandle>,
-    udp: BTreeMap<IpEndpoint, SocketHandle>,
+    udp: BTreeMap<IpListenEndpoint, SocketHandle>,
     tcp: BTreeMap<IpEndpoint, TcpLocalEndpoint>,
 
     rev_raw: BTreeMap<SocketHandle, (IpVersion, IpProtocol)>,
-    rev_udp: BTreeMap<SocketHandle, IpEndpoint>,
+    rev_udp: BTreeMap<SocketHandle, IpListenEndpoint>,
     rev_tcp: BTreeMap<SocketHandle, (IpEndpoint, Option<IpEndpoint>)>,
 }
 
@@ -48,9 +48,9 @@ impl DispatchTable {
         ip_repr: &crate::wire::IpRepr,
         udp_repr: &crate::wire::UdpRepr,
     ) -> Option<SocketHandle> {
-        DispatchTable::get_socket_data(
+        DispatchTable::get_socket_data_listen(
             &self.udp,
-            IpEndpoint::new(ip_repr.dst_addr(), udp_repr.dst_port),
+            IpListenEndpoint::from(IpEndpoint::new(ip_repr.dst_addr(), udp_repr.dst_port)),
         )
         .copied()
     }
@@ -86,6 +86,30 @@ impl DispatchTable {
             },
         }
     }
+
+    fn get_socket_data_listen<T>(
+        tree: &BTreeMap<IpListenEndpoint, T>,
+        endpoint: IpListenEndpoint,
+    ) -> Option<&T> {
+        let unspecified_endpoint = {
+            let mut endpoint = endpoint.clone();
+            endpoint.addr = None;
+            endpoint
+        };
+        let mut range = tree.range((Included(unspecified_endpoint), Included(endpoint)));
+        match range.next_back() {
+            None => None,
+            Some((&IpListenEndpoint { ref addr, .. }, h))
+                if *addr == endpoint.addr || addr.is_none() =>
+            {
+                Some(h)
+            }
+            _ => match range.next() {
+                Some((e, h)) if e.addr.is_none() => Some(h),
+                _ => None,
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -100,6 +124,10 @@ impl DispatchTable {
         handle: SocketHandle,
     ) -> Result<(), AddError> {
         let key = (socket.ip_version(), socket.ip_protocol());
+        net_trace!(
+            "added raw socket to dispatch table at (ip_version, ip_protocol) {:?}",
+            key
+        );
         match (self.raw.entry(key), self.rev_raw.entry(handle)) {
             (Entry::Vacant(e), Entry::Vacant(re)) => {
                 e.insert(handle);
@@ -118,18 +146,14 @@ impl DispatchTable {
         if !socket.endpoint().is_specified() && socket.endpoint().port == 0 {
             return Ok(());
         }
-        let endpoint = socket.endpoint();
-        let Some(endpoint) = endpoint
-            .addr
-            .map(|addr| IpEndpoint::new(addr, endpoint.port))
-        else {
-            return Ok(());
-        };
 
-        match (self.udp.entry(endpoint), self.rev_udp.entry(handle)) {
+        match (
+            self.udp.entry(socket.endpoint()),
+            self.rev_udp.entry(handle),
+        ) {
             (Entry::Vacant(e), Entry::Vacant(re)) => {
                 e.insert(handle);
-                re.insert(endpoint);
+                re.insert(socket.endpoint());
             }
             _ => return Err(AddError::AlreadyInUse),
         };
@@ -149,6 +173,11 @@ impl DispatchTable {
             Entry::Occupied(_) => return Err(AddError::AlreadyInUse),
             Entry::Vacant(e) => e,
         };
+
+        net_trace!(
+            "added tcp socket to dispatch table at local endpoint {:?}",
+            local_endpoint
+        );
 
         let tcp_endpoint = self
             .tcp
