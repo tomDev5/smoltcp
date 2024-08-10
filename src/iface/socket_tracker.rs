@@ -71,7 +71,6 @@ impl<'a> TrackedSocket for udp::Socket<'a> {
                 let res = dispatch_table.remove_udp_socket(handle);
                 debug_assert!(res.is_ok());
             }
-            net_trace!("add_udp_socket");
             let res = dispatch_table.add_udp_socket(self, handle);
             debug_assert!(res.is_ok());
         }
@@ -106,7 +105,6 @@ impl<'a> TrackedSocket for tcp::Socket<'a> {
         if state == &self.state() {
             return;
         }
-
         match (state, self.state()) {
             (_, tcp::State::Closed) => {
                 let res = dispatch_table.remove_tcp_socket(handle);

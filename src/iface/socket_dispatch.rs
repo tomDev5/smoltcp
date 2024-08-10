@@ -1,9 +1,10 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Bound::Included;
 
 use crate::socket::{raw, tcp, udp};
-use crate::wire::{IpAddress, IpEndpoint, IpListenEndpoint, IpProtocol, IpVersion};
+use crate::wire::{
+    IpAddress, IpEndpoint, IpListenEndpoint, IpProtocol, IpVersion, Ipv4Address, Ipv6Address,
+};
 
 use super::SocketHandle;
 
@@ -17,11 +18,11 @@ struct TcpLocalEndpoint {
 pub struct DispatchTable {
     raw: BTreeMap<(IpVersion, IpProtocol), SocketHandle>,
     udp: BTreeMap<IpListenEndpoint, SocketHandle>,
-    tcp: BTreeMap<IpEndpoint, TcpLocalEndpoint>,
+    tcp: BTreeMap<IpListenEndpoint, TcpLocalEndpoint>,
 
     rev_raw: BTreeMap<SocketHandle, (IpVersion, IpProtocol)>,
     rev_udp: BTreeMap<SocketHandle, IpListenEndpoint>,
-    rev_tcp: BTreeMap<SocketHandle, (IpEndpoint, Option<IpEndpoint>)>,
+    rev_tcp: BTreeMap<SocketHandle, (IpListenEndpoint, Option<IpEndpoint>)>,
 }
 
 impl DispatchTable {
@@ -30,17 +31,39 @@ impl DispatchTable {
         ip_repr: &crate::wire::IpRepr,
         tcp_repr: &crate::wire::TcpRepr,
     ) -> Option<SocketHandle> {
-        DispatchTable::get_socket_data(
-            &self.tcp,
-            IpEndpoint::new(ip_repr.dst_addr(), tcp_repr.dst_port),
-        )
-        .and_then(|tcp_endpoint| {
-            tcp_endpoint
-                .established_sockets
-                .get(&IpEndpoint::new(ip_repr.src_addr(), tcp_repr.src_port))
-                .or_else(|| tcp_endpoint.listen_sockets.iter().next())
-        })
-        .copied()
+        net_trace!("tree: {:?}", self.tcp);
+        net_trace!(
+            "get specific: {:?}",
+            self.tcp.get(&IpListenEndpoint::from(IpEndpoint::new(
+                // bound address and port
+                ip_repr.dst_addr(),
+                tcp_repr.dst_port,
+            )))
+        );
+        let local_endpoint = self
+            .tcp
+            .get(&IpListenEndpoint::from(IpEndpoint::new(
+                // bound address and port
+                ip_repr.dst_addr(),
+                tcp_repr.dst_port,
+            )))
+            .or_else(|| self.tcp.get(&IpListenEndpoint::from(tcp_repr.dst_port))) // bound port only
+            .or_else(|| {
+                self.tcp.get(&IpListenEndpoint::from(IpEndpoint::new(
+                    // bound port and ip version only
+                    match ip_repr.dst_addr().version() {
+                        IpVersion::Ipv4 => IpAddress::Ipv4(Ipv4Address::UNSPECIFIED),
+                        IpVersion::Ipv6 => IpAddress::Ipv6(Ipv6Address::UNSPECIFIED),
+                    },
+                    tcp_repr.dst_port,
+                )))
+            })?;
+
+        local_endpoint
+            .established_sockets
+            .get(&IpEndpoint::new(ip_repr.src_addr(), tcp_repr.src_port))
+            .or_else(|| local_endpoint.listen_sockets.iter().next())
+            .copied()
     }
 
     pub(crate) fn get_udp_socket(
@@ -48,11 +71,24 @@ impl DispatchTable {
         ip_repr: &crate::wire::IpRepr,
         udp_repr: &crate::wire::UdpRepr,
     ) -> Option<SocketHandle> {
-        DispatchTable::get_socket_data_listen(
-            &self.udp,
-            IpListenEndpoint::from(IpEndpoint::new(ip_repr.dst_addr(), udp_repr.dst_port)),
-        )
-        .copied()
+        self.udp
+            .get(&IpListenEndpoint::from(IpEndpoint::new(
+                // bound address and port
+                ip_repr.dst_addr(),
+                udp_repr.dst_port,
+            )))
+            .or_else(|| self.udp.get(&IpListenEndpoint::from(udp_repr.dst_port))) // bound port only
+            .or_else(|| {
+                self.udp.get(&IpListenEndpoint::from(IpEndpoint::new(
+                    // bound port and ip version only
+                    match ip_repr.dst_addr().version() {
+                        IpVersion::Ipv4 => IpAddress::Ipv4(Ipv4Address::UNSPECIFIED),
+                        IpVersion::Ipv6 => IpAddress::Ipv6(Ipv6Address::UNSPECIFIED),
+                    },
+                    udp_repr.dst_port,
+                )))
+            })
+            .copied()
     }
 
     pub(crate) fn get_raw_socket(
@@ -62,53 +98,6 @@ impl DispatchTable {
     ) -> Option<SocketHandle> {
         let key = (ip_version, ip_protocol);
         self.raw.get(&key).copied()
-    }
-
-    fn get_socket_data<T>(tree: &BTreeMap<IpEndpoint, T>, endpoint: IpEndpoint) -> Option<&T> {
-        let unspecified_endpoint = IpEndpoint::new(
-            match endpoint.addr.version() {
-                IpVersion::Ipv4 => IpAddress::Ipv4(crate::wire::Ipv4Address::UNSPECIFIED),
-                IpVersion::Ipv6 => IpAddress::Ipv6(crate::wire::Ipv6Address::UNSPECIFIED),
-            },
-            endpoint.port,
-        );
-        let mut range = tree.range((Included(unspecified_endpoint), Included(endpoint)));
-        match range.next_back() {
-            None => None,
-            Some((&IpEndpoint { ref addr, .. }, h))
-                if *addr == endpoint.addr || addr.is_unspecified() =>
-            {
-                Some(h)
-            }
-            _ => match range.next() {
-                Some((e, h)) if e.addr.is_unspecified() => Some(h),
-                _ => None,
-            },
-        }
-    }
-
-    fn get_socket_data_listen<T>(
-        tree: &BTreeMap<IpListenEndpoint, T>,
-        endpoint: IpListenEndpoint,
-    ) -> Option<&T> {
-        let unspecified_endpoint = {
-            let mut endpoint = endpoint.clone();
-            endpoint.addr = None;
-            endpoint
-        };
-        let mut range = tree.range((Included(unspecified_endpoint), Included(endpoint)));
-        match range.next_back() {
-            None => None,
-            Some((&IpListenEndpoint { ref addr, .. }, h))
-                if *addr == endpoint.addr || addr.is_none() =>
-            {
-                Some(h)
-            }
-            _ => match range.next() {
-                Some((e, h)) if e.addr.is_none() => Some(h),
-                _ => None,
-            },
-        }
     }
 }
 
@@ -147,6 +136,11 @@ impl DispatchTable {
             return Ok(());
         }
 
+        net_trace!(
+            "added udp socket to dispatch table at endpoint {:?}",
+            socket.endpoint()
+        );
+
         match (
             self.udp.entry(socket.endpoint()),
             self.rev_udp.entry(handle),
@@ -165,7 +159,7 @@ impl DispatchTable {
         socket: &tcp::Socket<'_>,
         handle: SocketHandle,
     ) -> Result<(), AddError> {
-        let Some(local_endpoint) = socket.local_endpoint() else {
+        let Some(listen_endpoint) = socket.listen_endpoint() else {
             return Ok(());
         };
 
@@ -174,14 +168,9 @@ impl DispatchTable {
             Entry::Vacant(e) => e,
         };
 
-        net_trace!(
-            "added tcp socket to dispatch table at local endpoint {:?}",
-            local_endpoint
-        );
-
         let tcp_endpoint = self
             .tcp
-            .entry(local_endpoint)
+            .entry(listen_endpoint)
             .or_insert_with(TcpLocalEndpoint::default);
 
         if let Some(remote_endpoint) = socket.remote_endpoint() {
@@ -190,13 +179,13 @@ impl DispatchTable {
                 Entry::Occupied(_) => return Err(AddError::AlreadyInUse),
                 Entry::Vacant(e) => {
                     e.insert(handle);
-                    rev_entry.insert((local_endpoint, Some(remote_endpoint)));
+                    rev_entry.insert((listen_endpoint, Some(remote_endpoint)));
                 }
             };
         } else {
             // socket not established
             tcp_endpoint.listen_sockets.insert(handle);
-            rev_entry.insert((local_endpoint, None));
+            rev_entry.insert((listen_endpoint, None));
         }
 
         Ok(())

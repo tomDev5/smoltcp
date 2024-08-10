@@ -798,6 +798,16 @@ impl<'a> Socket<'a> {
         self.hop_limit = hop_limit
     }
 
+    /// Return the listen endpoint, or None if state is not [State::Listen].
+    #[inline]
+    pub fn listen_endpoint(&self) -> Option<IpListenEndpoint> {
+        if self.state() == State::Listen {
+            Some(self.listen_endpoint)
+        } else {
+            None
+        }
+    }
+
     /// Return the local endpoint, or None if not connected.
     #[inline]
     pub fn local_endpoint(&self) -> Option<IpEndpoint> {

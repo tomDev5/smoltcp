@@ -274,3 +274,137 @@ impl<'a> SocketSet<'a> {
         Some(tracker)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::wire::*;
+
+    #[test]
+    fn dispatcher() {
+        let eps = [
+            IpEndpoint::new(IpAddress::Ipv4(Ipv4Address::UNSPECIFIED), 12345u16),
+            // IpEndpoint::new(IpAddress::Ipv6(Ipv4Address::UNSPECIFIED), 12345u16),
+            IpEndpoint::new(IpAddress::Ipv4(Ipv4Address::new(192, 168, 1, 1)), 12345u16),
+            IpEndpoint::new(IpAddress::Ipv4(Ipv4Address::new(192, 168, 1, 2)), 12345u16),
+            IpEndpoint::new(IpAddress::Ipv4(Ipv4Address::new(192, 168, 1, 3)), 12345u16),
+            IpEndpoint::new(IpAddress::Ipv4(Ipv4Address::new(192, 168, 1, 4)), 12345u16),
+            IpEndpoint::new(IpAddress::Ipv4(Ipv4Address::new(192, 168, 1, 5)), 12345u16),
+        ];
+
+        let mut sockets = SocketSet::new(vec![]);
+        let udp_rx_buffer =
+            udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 1024]);
+        let udp_tx_buffer =
+            udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 1024]);
+        let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
+
+        let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 60]);
+        let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 128]);
+        let tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
+
+        let tcp_rx_buffer2 = tcp::SocketBuffer::new(vec![0; 61]);
+        let tcp_tx_buffer2 = tcp::SocketBuffer::new(vec![0; 128]);
+        let tcp_socket2 = tcp::Socket::new(tcp_rx_buffer2, tcp_tx_buffer2);
+
+        let tcp_rx_buffer3 = tcp::SocketBuffer::new(vec![0; 62]);
+        let tcp_tx_buffer3 = tcp::SocketBuffer::new(vec![0; 128]);
+        let tcp_socket3 = tcp::Socket::new(tcp_rx_buffer3, tcp_tx_buffer3);
+
+        let udp_handle = sockets.add(udp_socket); //.unwrap();
+        let tcp_handle = sockets.add(tcp_socket); //.unwrap();
+        let tcp_handle2 = sockets.add(tcp_socket2); //.unwrap();
+        let tcp_handle3 = sockets.add(tcp_socket3); //.unwrap();
+
+        {
+            let mut tcp_socket = sockets.get_mut::<tcp::Socket>(tcp_handle); //.unwrap();
+            tcp_socket.listen(eps[0]).unwrap();
+        }
+        {
+            let mut tcp_socket2 = sockets.get_mut::<tcp::Socket>(tcp_handle2); //.unwrap();
+            tcp_socket2.listen(eps[2]).unwrap();
+        }
+        {
+            let mut tcp_socket3 = sockets.get_mut::<tcp::Socket>(tcp_handle3); //.unwrap();
+            tcp_socket3.listen(eps[4]).unwrap();
+        }
+        {
+            let mut udp_socket = sockets.get_mut::<udp::Socket>(udp_handle); //.unwrap();
+            udp_socket.bind(eps[0]).unwrap();
+        }
+
+        let tcp_payload = vec![];
+
+        let mut tcp_repr = TcpRepr {
+            src_port: 9999u16,
+            dst_port: 12345u16,
+            control: TcpControl::Syn,
+            seq_number: TcpSeqNumber(0),
+            ack_number: None,
+            window_len: 0u16,
+            max_seg_size: None,
+            payload: &tcp_payload,
+            window_scale: None,
+            sack_permitted: false,
+            sack_ranges: [None, None, None],
+            timestamp: None,
+        };
+
+        let mut ipv4_repr = Ipv4Repr {
+            src_addr: Ipv4Address::new(192, 168, 1, 100),
+            dst_addr: Ipv4Address::new(192, 168, 1, 1),
+            payload_len: 0,
+            next_header: IpProtocol::Tcp,
+            hop_limit: 64,
+        };
+
+        let udp_repr = UdpRepr {
+            src_port: 9999u16,
+            dst_port: 12345u16,
+        };
+
+        {
+            sockets
+                .get_mut_udp_socket(&IpRepr::Ipv4(ipv4_repr), &udp_repr)
+                .unwrap();
+        }
+
+        for &(ep_index, expected_rx_buffer_size) in &[(1, 60), (2, 61), (3, 60), (4, 62), (5, 60)] {
+            ipv4_repr.dst_addr = match eps[ep_index].addr {
+                IpAddress::Ipv4(a) => a,
+                _ => unreachable!(),
+            };
+            tcp_repr.dst_port = eps[ep_index].port;
+            let tracked_socket = sockets
+                .get_mut_tcp_socket(&IpRepr::Ipv4(ipv4_repr), &tcp_repr)
+                .unwrap();
+            assert_eq!(tracked_socket.recv_capacity(), expected_rx_buffer_size);
+        }
+
+        sockets.remove(udp_handle);
+
+        assert!(sockets
+            .get_mut_udp_socket(&IpRepr::Ipv4(ipv4_repr), &udp_repr)
+            .is_none());
+
+        ipv4_repr.dst_addr = Ipv4Address::new(192, 168, 1, 2);
+
+        assert_eq!(
+            sockets
+                .get_mut_tcp_socket(&IpRepr::Ipv4(ipv4_repr), &tcp_repr)
+                .unwrap()
+                .recv_capacity(),
+            61
+        );
+
+        sockets.remove(tcp_handle2);
+
+        assert_eq!(
+            sockets
+                .get_mut_tcp_socket(&IpRepr::Ipv4(ipv4_repr), &tcp_repr)
+                .unwrap()
+                .recv_capacity(),
+            60
+        );
+    }
+}
