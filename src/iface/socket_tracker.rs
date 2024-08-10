@@ -178,11 +178,9 @@ impl<'a> TrackedSocket for crate::socket::Socket<'a> {
     fn new_state(&self) -> Self::State {
         match self {
             crate::socket::Socket::Raw(socket) => SocketState::Raw(socket.new_state()),
-            crate::socket::Socket::Icmp(_) => unreachable!(),
             crate::socket::Socket::Udp(socket) => SocketState::Udp(socket.new_state()),
             crate::socket::Socket::Tcp(socket) => SocketState::Tcp(socket.new_state()),
-            crate::socket::Socket::Dhcpv4(_) => unreachable!(),
-            crate::socket::Socket::Dns(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 

@@ -81,6 +81,21 @@ impl<'a> SocketSet<'a> {
 
         for (index, slot) in self.sockets.iter_mut().enumerate() {
             if slot.inner.is_none() {
+                match &socket {
+                    Socket::Raw(socket) => self
+                        .dispatch_table
+                        .add_raw_socket(&socket, SocketHandle(index))
+                        .unwrap(),
+                    Socket::Udp(socket) => self
+                        .dispatch_table
+                        .add_udp_socket(&socket, SocketHandle(index))
+                        .unwrap(),
+                    Socket::Tcp(socket) => self
+                        .dispatch_table
+                        .add_tcp_socket(&socket, SocketHandle(index))
+                        .unwrap(), // todo not unwrap
+                    _ => {}
+                };
                 return put(index, slot, socket);
             }
         }
@@ -91,6 +106,21 @@ impl<'a> SocketSet<'a> {
             ManagedSlice::Owned(sockets) => {
                 sockets.push(SocketStorage { inner: None });
                 let index = sockets.len() - 1;
+                match &socket {
+                    Socket::Raw(socket) => self
+                        .dispatch_table
+                        .add_raw_socket(&socket, SocketHandle(index))
+                        .unwrap(),
+                    Socket::Udp(socket) => self
+                        .dispatch_table
+                        .add_udp_socket(&socket, SocketHandle(index))
+                        .unwrap(),
+                    Socket::Tcp(socket) => self
+                        .dispatch_table
+                        .add_tcp_socket(&socket, SocketHandle(index))
+                        .unwrap(), // todo not unwrap
+                    _ => {}
+                };
                 put(index, &mut sockets[index], socket)
             }
         }
