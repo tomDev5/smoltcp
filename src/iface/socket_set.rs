@@ -169,7 +169,7 @@ impl<'a> SocketSet<'a> {
             panic!("handle does not refer to a valid socket");
         };
 
-        let socket = item.socket;
+        let mut socket = item.socket;
 
         match socket {
             Socket::Raw(_) => self.dispatch_table.remove_raw_socket(handle).unwrap(),
@@ -177,6 +177,8 @@ impl<'a> SocketSet<'a> {
             Socket::Tcp(_) => self.dispatch_table.remove_tcp_socket(handle).unwrap(),
             _ => {}
         }
+
+        socket.set_on_dirty_list(false);
 
         socket
     }

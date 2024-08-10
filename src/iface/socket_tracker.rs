@@ -302,6 +302,7 @@ impl<'a, T: TrackedSocket + 'a> Drop for SocketTracker<'a, T> {
             .on_drop(&self.state, self.dispatch_table, self.handle);
         if !TrackedSocket::is_on_dirty_list(self.socket) && TrackedSocket::is_dirty(self.socket) {
             self.dirty_sockets.insert(self.handle);
+            self.socket.set_on_dirty_list(true);
         }
     }
 }
