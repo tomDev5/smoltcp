@@ -598,7 +598,7 @@ fn test_icmpv4_socket(#[case] medium: Medium) {
 
     let icmpv4_socket = icmp::Socket::new(rx_buffer, tx_buffer);
 
-    let socket_handle = sockets.add(icmpv4_socket);
+    let socket_handle = sockets.add(icmpv4_socket).unwrap();
 
     let ident = 0x1234;
     let seq_no = 0x5432;
@@ -782,7 +782,7 @@ fn test_raw_socket_no_reply(#[case] medium: Medium) {
         vec![0; 48 * packets],
     );
     let raw_socket = raw::Socket::new(IpVersion::Ipv4, IpProtocol::Udp, rx_buffer, tx_buffer);
-    sockets.add(raw_socket);
+    sockets.add(raw_socket).unwrap();
 
     let src_addr = Ipv4Address([127, 0, 0, 2]);
     let dst_addr = Ipv4Address([127, 0, 0, 1]);
@@ -861,7 +861,7 @@ fn test_raw_socket_with_udp_socket(#[case] medium: Medium) {
     let udp_rx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY], vec![0; 15]);
     let udp_tx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY], vec![0; 15]);
     let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
-    let udp_socket_handle = sockets.add(udp_socket);
+    let udp_socket_handle = sockets.add(udp_socket).unwrap();
 
     // Bind the socket to port 68
     {
@@ -884,7 +884,7 @@ fn test_raw_socket_with_udp_socket(#[case] medium: Medium) {
         raw_rx_buffer,
         raw_tx_buffer,
     );
-    sockets.add(raw_socket);
+    sockets.add(raw_socket).unwrap();
 
     let src_addr = Ipv4Address([127, 0, 0, 2]);
     let dst_addr = Ipv4Address([127, 0, 0, 1]);

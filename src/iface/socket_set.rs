@@ -2,6 +2,7 @@ use core::fmt;
 use managed::ManagedSlice;
 
 use super::{
+    socket_dispatch,
     socket_meta::Meta,
     socket_tracker::{SocketTracker, TrackedSocket},
     DirtySockets, DispatchTable,
@@ -69,38 +70,43 @@ impl<'a> SocketSet<'a> {
     ///
     /// # Panics
     /// This function panics if the storage is fixed-size (not a `Vec`) and is full.
-    pub fn add<T: AnySocket<'a>>(&mut self, socket: T) -> SocketHandle {
-        fn put<'a>(index: usize, slot: &mut SocketStorage<'a>, socket: Socket<'a>) -> SocketHandle {
+    pub fn add<T: AnySocket<'a>>(
+        &mut self,
+        socket: T,
+    ) -> Result<SocketHandle, socket_dispatch::AddError> {
+        fn put<'a>(
+            index: usize,
+            slot: &mut SocketStorage<'a>,
+            dispatch_table: &mut DispatchTable,
+            socket: Socket<'a>,
+        ) -> Result<SocketHandle, socket_dispatch::AddError> {
             net_trace!("[{}]: adding", index);
+            match &socket {
+                Socket::Raw(socket) => {
+                    dispatch_table.add_raw_socket(&socket, SocketHandle(index))?
+                }
+                Socket::Udp(socket) => {
+                    dispatch_table.add_udp_socket(&socket, SocketHandle(index))?
+                }
+                Socket::Tcp(socket) => {
+                    dispatch_table.add_tcp_socket(&socket, SocketHandle(index))?
+                }
+                _ => {}
+            };
             let handle = SocketHandle(index);
             let mut meta = Meta::default();
             meta.handle = handle;
             *slot = SocketStorage {
                 inner: Some(Item { meta, socket }),
             };
-            handle
+            Ok(handle)
         }
 
         let socket = socket.upcast();
 
         for (index, slot) in self.sockets.iter_mut().enumerate() {
             if slot.inner.is_none() {
-                match &socket {
-                    Socket::Raw(socket) => self
-                        .dispatch_table
-                        .add_raw_socket(&socket, SocketHandle(index))
-                        .unwrap(),
-                    Socket::Udp(socket) => self
-                        .dispatch_table
-                        .add_udp_socket(&socket, SocketHandle(index))
-                        .unwrap(),
-                    Socket::Tcp(socket) => self
-                        .dispatch_table
-                        .add_tcp_socket(&socket, SocketHandle(index))
-                        .unwrap(), // todo not unwrap
-                    _ => {}
-                };
-                return put(index, slot, socket);
+                return put(index, slot, &mut self.dispatch_table, socket);
             }
         }
 
@@ -110,22 +116,7 @@ impl<'a> SocketSet<'a> {
             ManagedSlice::Owned(sockets) => {
                 sockets.push(SocketStorage { inner: None });
                 let index = sockets.len() - 1;
-                match &socket {
-                    Socket::Raw(socket) => self
-                        .dispatch_table
-                        .add_raw_socket(&socket, SocketHandle(index))
-                        .unwrap(),
-                    Socket::Udp(socket) => self
-                        .dispatch_table
-                        .add_udp_socket(&socket, SocketHandle(index))
-                        .unwrap(),
-                    Socket::Tcp(socket) => self
-                        .dispatch_table
-                        .add_tcp_socket(&socket, SocketHandle(index))
-                        .unwrap(), // todo not unwrap
-                    _ => {}
-                };
-                put(index, &mut sockets[index], socket)
+                put(index, &mut sockets[index], &mut self.dispatch_table, socket)
             }
         }
     }
@@ -311,25 +302,25 @@ mod test {
         let tcp_tx_buffer3 = tcp::SocketBuffer::new(vec![0; 128]);
         let tcp_socket3 = tcp::Socket::new(tcp_rx_buffer3, tcp_tx_buffer3);
 
-        let udp_handle = sockets.add(udp_socket); //.unwrap();
-        let tcp_handle = sockets.add(tcp_socket); //.unwrap();
-        let tcp_handle2 = sockets.add(tcp_socket2); //.unwrap();
-        let tcp_handle3 = sockets.add(tcp_socket3); //.unwrap();
+        let udp_handle = sockets.add(udp_socket).unwrap();
+        let tcp_handle = sockets.add(tcp_socket).unwrap();
+        let tcp_handle2 = sockets.add(tcp_socket2).unwrap();
+        let tcp_handle3 = sockets.add(tcp_socket3).unwrap();
 
         {
-            let mut tcp_socket = sockets.get_mut::<tcp::Socket>(tcp_handle); //.unwrap();
+            let mut tcp_socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
             tcp_socket.listen(eps[0]).unwrap();
         }
         {
-            let mut tcp_socket2 = sockets.get_mut::<tcp::Socket>(tcp_handle2); //.unwrap();
+            let mut tcp_socket2 = sockets.get_mut::<tcp::Socket>(tcp_handle2);
             tcp_socket2.listen(eps[2]).unwrap();
         }
         {
-            let mut tcp_socket3 = sockets.get_mut::<tcp::Socket>(tcp_handle3); //.unwrap();
+            let mut tcp_socket3 = sockets.get_mut::<tcp::Socket>(tcp_handle3);
             tcp_socket3.listen(eps[4]).unwrap();
         }
         {
-            let mut udp_socket = sockets.get_mut::<udp::Socket>(udp_handle); //.unwrap();
+            let mut udp_socket = sockets.get_mut::<udp::Socket>(udp_handle);
             udp_socket.bind(eps[0]).unwrap();
         }
 
