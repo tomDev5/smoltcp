@@ -48,13 +48,15 @@ fn main() {
     dhcp_socket.set_max_lease_duration(Some(Duration::from_secs(10)));
 
     let mut sockets = SocketSet::new(vec![]);
-    let dhcp_handle = sockets.add(dhcp_socket);
+    let dhcp_handle = sockets.add(dhcp_socket).unwrap();
 
     loop {
         let timestamp = Instant::now();
         iface.poll(timestamp, &mut device, &mut sockets);
 
-        let event = sockets.get_mut::<dhcpv4::Socket>(dhcp_handle).poll();
+        let mut mut_dhcp_socket = sockets.get_mut::<dhcpv4::Socket>(dhcp_handle);
+        let event = mut_dhcp_socket.poll();
+
         match event {
             None => {}
             Some(dhcpv4::Event::Configured(config)) => {
@@ -81,6 +83,8 @@ fn main() {
                 iface.routes_mut().remove_default_ipv4_route();
             }
         }
+
+        drop(mut_dhcp_socket);
 
         phy_wait(fd, iface.poll_delay(timestamp, &sockets)).expect("wait error");
     }

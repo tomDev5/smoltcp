@@ -71,14 +71,14 @@ fn main() {
         raw_rx_buffer,
         raw_tx_buffer,
     );
-    let raw_handle = sockets.add(raw_socket);
+    let raw_handle = sockets.add(raw_socket).unwrap();
 
     // Must fit mDNS payload of at least one packet
     let udp_rx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 1024]);
     // Will not send mDNS
     let udp_tx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY], vec![0; 0]);
     let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
-    let udp_handle = sockets.add(udp_socket);
+    let udp_handle = sockets.add(udp_socket).unwrap();
 
     // Join a multicast group to receive mDNS traffic
     iface
@@ -93,7 +93,7 @@ fn main() {
         let timestamp = Instant::now();
         iface.poll(timestamp, &mut device, &mut sockets);
 
-        let socket = sockets.get_mut::<raw::Socket>(raw_handle);
+        let mut socket = sockets.get_mut::<raw::Socket>(raw_handle);
 
         if socket.can_recv() {
             // For display purposes only - normally we wouldn't process incoming IGMP packets
@@ -110,7 +110,9 @@ fn main() {
             }
         }
 
-        let socket = sockets.get_mut::<udp::Socket>(udp_handle);
+        drop(socket);
+
+        let mut socket = sockets.get_mut::<udp::Socket>(udp_handle);
         if !socket.is_open() {
             socket.bind(MDNS_PORT).unwrap()
         }
@@ -123,6 +125,8 @@ fn main() {
                 })
                 .unwrap_or_else(|e| println!("Recv UDP error: {e:?}"));
         }
+
+        drop(socket);
 
         phy_wait(fd, iface.poll_delay(timestamp, &sockets)).expect("wait error");
     }

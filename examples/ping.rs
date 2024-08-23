@@ -140,7 +140,7 @@ fn main() {
     let icmp_tx_buffer = icmp::PacketBuffer::new(vec![icmp::PacketMetadata::EMPTY], vec![0; 256]);
     let icmp_socket = icmp::Socket::new(icmp_rx_buffer, icmp_tx_buffer);
     let mut sockets = SocketSet::new(vec![]);
-    let icmp_handle = sockets.add(icmp_socket);
+    let icmp_handle = sockets.add(icmp_socket).unwrap();
 
     let mut send_at = Instant::from_millis(0);
     let mut seq_no = 0;
@@ -154,7 +154,7 @@ fn main() {
         iface.poll(timestamp, &mut device, &mut sockets);
 
         let timestamp = Instant::now();
-        let socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
+        let mut socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
         if !socket.is_open() {
             socket.bind(icmp::Endpoint::Ident(ident)).unwrap();
             send_at = timestamp;
@@ -238,6 +238,8 @@ fn main() {
                 }
             }
         }
+
+        drop(socket);
 
         waiting_queue.retain(|seq, from| {
             if timestamp - *from < timeout {

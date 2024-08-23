@@ -62,7 +62,7 @@ fn main() {
     let udp_rx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 1024]);
     let udp_tx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY], vec![0; 0]);
     let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
-    let udp_handle = sockets.add(udp_socket);
+    let udp_handle = sockets.add(udp_socket).unwrap();
 
     // Join a multicast group
     iface
@@ -73,7 +73,7 @@ fn main() {
         let timestamp = Instant::now();
         iface.poll(timestamp, &mut device, &mut sockets);
 
-        let socket = sockets.get_mut::<udp::Socket>(udp_handle);
+        let mut socket = sockets.get_mut::<udp::Socket>(udp_handle);
         if !socket.is_open() {
             socket.bind(PORT).unwrap()
         }
@@ -84,6 +84,8 @@ fn main() {
                 .map(|(data, sender)| println!("traffic: {} UDP bytes from {}", data.len(), sender))
                 .unwrap_or_else(|e| println!("Recv UDP error: {:?}", e));
         }
+
+        drop(socket);
 
         phy_wait(fd, iface.poll_delay(timestamp, &sockets)).expect("wait error");
     }

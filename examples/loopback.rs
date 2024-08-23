@@ -121,8 +121,8 @@ fn main() {
 
     let mut sockets: [_; 2] = Default::default();
     let mut sockets = SocketSet::new(&mut sockets[..]);
-    let server_handle = sockets.add(server_socket);
-    let client_handle = sockets.add(client_socket);
+    let server_handle = sockets.add(server_socket).unwrap();
+    let client_handle = sockets.add(client_socket).unwrap();
 
     let mut did_listen = false;
     let mut did_connect = false;
@@ -148,6 +148,8 @@ fn main() {
             done = true;
         }
 
+        drop(socket);
+
         let mut socket = sockets.get_mut::<tcp::Socket>(client_handle);
         let cx = iface.context();
         if !socket.is_open() {
@@ -165,6 +167,8 @@ fn main() {
             socket.send_slice(b"0123456789abcdef").unwrap();
             socket.close();
         }
+
+        drop(socket);
 
         match iface.poll_delay(clock.elapsed(), &sockets) {
             Some(Duration::ZERO) => debug!("resuming"),

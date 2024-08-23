@@ -99,11 +99,13 @@ fn main() {
     let tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 
     let mut sockets = SocketSet::new(vec![]);
-    let udp_handle = sockets.add(udp_socket);
-    let tcp_handle = sockets.add(tcp_socket);
+    let udp_handle = sockets.add(udp_socket).unwrap();
+    let tcp_handle = sockets.add(tcp_socket).unwrap();
 
-    let socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
-    socket.listen(50000).unwrap();
+    sockets
+        .get_mut::<tcp::Socket>(tcp_handle)
+        .listen(50000)
+        .unwrap();
 
     let mut tcp_active = false;
 
@@ -112,7 +114,7 @@ fn main() {
         iface.poll(timestamp, &mut device, &mut sockets);
 
         // udp:6969: respond "hello"
-        let socket = sockets.get_mut::<udp::Socket>(udp_handle);
+        let mut socket = sockets.get_mut::<udp::Socket>(udp_handle);
         if !socket.is_open() {
             socket.bind(6969).unwrap()
         }
@@ -138,7 +140,9 @@ fn main() {
             socket.send_slice(&buffer[..len], endpoint).unwrap();
         }
 
-        let socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
+        drop(socket);
+
+        let mut socket = sockets.get_mut::<tcp::Socket>(tcp_handle);
         if socket.is_active() && !tcp_active {
             debug!("connected");
         } else if !socket.is_active() && tcp_active {
@@ -171,6 +175,8 @@ fn main() {
             debug!("close");
             socket.close();
         }
+
+        drop(socket);
 
         phy_wait(fd, iface.poll_delay(timestamp, &sockets)).expect("wait error");
     }

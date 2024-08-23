@@ -103,8 +103,8 @@ fn main() {
     });
 
     let mut sockets = SocketSet::new(vec![]);
-    let tcp1_handle = sockets.add(tcp1_socket);
-    let tcp2_handle = sockets.add(tcp2_socket);
+    let tcp1_handle = sockets.add(tcp1_socket).unwrap();
+    let tcp2_handle = sockets.add(tcp2_socket).unwrap();
     let default_timeout = Some(Duration::from_millis(1000));
 
     thread::spawn(move || client(mode));
@@ -114,7 +114,7 @@ fn main() {
         iface.poll(timestamp, &mut device, &mut sockets);
 
         // tcp:1234: emit data
-        let socket = sockets.get_mut::<tcp::Socket>(tcp1_handle);
+        let mut socket = sockets.get_mut::<tcp::Socket>(tcp1_handle);
         if !socket.is_open() {
             socket.listen(1234).unwrap();
         }
@@ -129,8 +129,10 @@ fn main() {
             processed += length;
         }
 
+        drop(socket);
+
         // tcp:1235: sink data
-        let socket = sockets.get_mut::<tcp::Socket>(tcp2_handle);
+        let mut socket = sockets.get_mut::<tcp::Socket>(tcp2_handle);
         if !socket.is_open() {
             socket.listen(1235).unwrap();
         }
@@ -144,6 +146,8 @@ fn main() {
                 .unwrap();
             processed += length;
         }
+
+        drop(socket);
 
         match iface.poll_at(timestamp, &sockets) {
             Some(poll_at) if timestamp < poll_at => {
