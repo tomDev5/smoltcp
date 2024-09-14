@@ -159,7 +159,10 @@ impl DispatchTable {
         socket: &tcp::Socket<'_>,
         handle: SocketHandle,
     ) -> Result<(), AddError> {
-        let Some(listen_endpoint) = socket.listen_endpoint() else {
+        let Some(listen_endpoint) = socket
+            .listen_endpoint()
+            .or_else(|| socket.local_endpoint().map(Into::into))
+        else {
             return Ok(());
         };
 
