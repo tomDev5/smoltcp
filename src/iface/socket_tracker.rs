@@ -64,8 +64,6 @@ impl<'a> TrackedSocket for udp::Socket<'a> {
         dispatch_table: &mut DispatchTable,
         handle: SocketHandle,
     ) {
-        net_trace!("udp on_drop old state: {:?}", old_endpoint);
-        net_trace!("udp on_drop state: {:?}", self.endpoint());
         if old_endpoint != self.endpoint() {
             if old_endpoint.is_specified() {
                 let res = dispatch_table.remove_udp_socket(handle);

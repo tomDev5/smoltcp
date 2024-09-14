@@ -31,15 +31,6 @@ impl DispatchTable {
         ip_repr: &crate::wire::IpRepr,
         tcp_repr: &crate::wire::TcpRepr,
     ) -> Option<SocketHandle> {
-        net_trace!("tree: {:?}", self.tcp);
-        net_trace!(
-            "get specific: {:?}",
-            self.tcp.get(&IpListenEndpoint::from(IpEndpoint::new(
-                // bound address and port
-                ip_repr.dst_addr(),
-                tcp_repr.dst_port,
-            )))
-        );
         let local_endpoint = self
             .tcp
             .get(&IpListenEndpoint::from(IpEndpoint::new(
