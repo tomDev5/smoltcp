@@ -172,9 +172,15 @@ impl<'a> SocketSet<'a> {
         let mut socket = item.socket;
 
         match socket {
-            Socket::Raw(_) => self.dispatch_table.remove_raw_socket(handle).unwrap(),
-            Socket::Udp(_) => self.dispatch_table.remove_udp_socket(handle).unwrap(),
-            Socket::Tcp(_) => self.dispatch_table.remove_tcp_socket(handle).unwrap(),
+            Socket::Raw(_) => {
+                let _ = self.dispatch_table.remove_raw_socket(handle);
+            }
+            Socket::Udp(_) => {
+                let _ = self.dispatch_table.remove_udp_socket(handle);
+            }
+            Socket::Tcp(_) => {
+                let _ = self.dispatch_table.remove_tcp_socket(handle);
+            }
             _ => {}
         }
 
