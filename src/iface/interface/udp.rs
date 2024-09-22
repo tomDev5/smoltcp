@@ -1,15 +1,9 @@
 use super::*;
 
-#[cfg(feature = "socket-dns")]
-use crate::socket::dns::Socket as DnsSocket;
-
-#[cfg(feature = "socket-udp")]
-use crate::socket::udp::Socket as UdpSocket;
-
 impl InterfaceInner {
     pub(super) fn process_udp<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         meta: PacketMeta,
         handled_by_raw_socket: bool,
         ip_repr: IpRepr,
@@ -25,10 +19,7 @@ impl InterfaceInner {
         ));
 
         #[cfg(feature = "socket-udp")]
-        for udp_socket in sockets
-            .items_mut()
-            .filter_map(|i| UdpSocket::downcast_mut(&mut i.socket))
-        {
+        if let Some(mut udp_socket) = sockets.get_udp_socket(self, &ip_repr, &udp_repr) {
             if udp_socket.accepts(self, &ip_repr, &udp_repr) {
                 udp_socket.process(self, meta, &ip_repr, &udp_repr, udp_packet.payload());
                 return None;
@@ -36,10 +27,7 @@ impl InterfaceInner {
         }
 
         #[cfg(feature = "socket-dns")]
-        for dns_socket in sockets
-            .items_mut()
-            .filter_map(|i| DnsSocket::downcast_mut(&mut i.socket))
-        {
+        if let Some(mut dns_socket) = sockets.get_dns_socket(&ip_repr, &udp_repr) {
             if dns_socket.accepts(&ip_repr, &udp_repr) {
                 dns_socket.process(self, &ip_repr, &udp_repr, udp_packet.payload());
                 return None;

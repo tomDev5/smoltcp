@@ -11,7 +11,7 @@ impl InterfaceInner {
 
     pub(super) fn process_ieee802154<'output, 'payload: 'output>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         meta: PacketMeta,
         sixlowpan_payload: &'payload [u8],
         _fragments: &'output mut FragmentsBuffer,

@@ -316,11 +316,11 @@ impl InterfaceInner {
     /// Membership must not be reported immediately in order to avoid flooding the network
     /// after a query is broadcasted by a router; this is not currently done.
     #[cfg(feature = "proto-ipv4")]
-    pub(super) fn process_igmp<'frame>(
+    pub(super) fn process_igmp<'b, 'c>(
         &mut self,
         ipv4_repr: Ipv4Repr,
-        ip_payload: &'frame [u8],
-    ) -> Option<Packet<'frame>> {
+        ip_payload: &'b [u8],
+    ) -> Option<Packet<'c>> {
         use crate::time::Duration;
 
         let igmp_packet = check!(IgmpPacket::new_checked(ip_payload));

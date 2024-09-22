@@ -84,7 +84,7 @@ impl InterfaceInner {
 
     pub(super) fn process_ipv4<'a>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         meta: PacketMeta,
         source_hardware_addr: HardwareAddress,
         ipv4_packet: &Ipv4Packet<&'a [u8]>,
@@ -147,30 +147,19 @@ impl InterfaceInner {
 
         #[cfg(feature = "socket-dhcpv4")]
         {
-            use crate::socket::dhcpv4::Socket as Dhcpv4Socket;
-
             if ipv4_repr.next_header == IpProtocol::Udp
                 && matches!(self.caps.medium, Medium::Ethernet)
             {
                 let udp_packet = check!(UdpPacket::new_checked(ip_payload));
-                if let Some(dhcp_socket) = sockets
-                    .items_mut()
-                    .find_map(|i| Dhcpv4Socket::downcast_mut(&mut i.socket))
-                {
-                    // First check for source and dest ports, then do `UdpRepr::parse` if they match.
-                    // This way we avoid validating the UDP checksum twice for all non-DHCP UDP packets (one here, one in `process_udp`)
-                    if udp_packet.src_port() == dhcp_socket.server_port
-                        && udp_packet.dst_port() == dhcp_socket.client_port
-                    {
-                        let udp_repr = check!(UdpRepr::parse(
-                            &udp_packet,
-                            &ipv4_repr.src_addr.into(),
-                            &ipv4_repr.dst_addr.into(),
-                            &self.caps.checksum
-                        ));
-                        dhcp_socket.process(self, &ipv4_repr, &udp_repr, udp_packet.payload());
-                        return None;
-                    }
+                let udp_repr = check!(UdpRepr::parse(
+                    &udp_packet,
+                    &ipv4_repr.src_addr.into(),
+                    &ipv4_repr.dst_addr.into(),
+                    &self.caps.checksum
+                ));
+                if let Some(mut dhcp_socket) = sockets.get_dhcpv4_socket(&udp_repr) {
+                    dhcp_socket.process(self, &ipv4_repr, &udp_repr, udp_packet.payload());
+                    return None;
                 }
             }
         }
@@ -299,7 +288,7 @@ impl InterfaceInner {
 
     pub(super) fn process_icmpv4<'frame>(
         &mut self,
-        _sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         ip_repr: Ipv4Repr,
         ip_payload: &'frame [u8],
     ) -> Option<Packet<'frame>> {
@@ -310,14 +299,9 @@ impl InterfaceInner {
         let mut handled_by_icmp_socket = false;
 
         #[cfg(all(feature = "socket-icmp", feature = "proto-ipv4"))]
-        for icmp_socket in _sockets
-            .items_mut()
-            .filter_map(|i| icmp::Socket::downcast_mut(&mut i.socket))
-        {
-            if icmp_socket.accepts_v4(self, &ip_repr, &icmp_repr) {
-                icmp_socket.process_v4(self, &ip_repr, &icmp_repr);
-                handled_by_icmp_socket = true;
-            }
+        if let Some(mut icmp_socket) = sockets.get_icmpv4_socket(self, &ip_repr, &icmp_repr) {
+            icmp_socket.process_v4(self, &ip_repr, &icmp_repr);
+            handled_by_icmp_socket = true;
         }
 
         match icmp_repr {

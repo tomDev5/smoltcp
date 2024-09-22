@@ -5,7 +5,7 @@ use crate::socket::tcp::Socket;
 impl InterfaceInner {
     pub(crate) fn process_tcp<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         ip_repr: IpRepr,
         ip_payload: &'frame [u8],
     ) -> Option<Packet<'frame>> {
@@ -18,10 +18,7 @@ impl InterfaceInner {
             &self.caps.checksum
         ));
 
-        for tcp_socket in sockets
-            .items_mut()
-            .filter_map(|i| Socket::downcast_mut(&mut i.socket))
-        {
+        if let Some(mut tcp_socket) = sockets.get_tcp_socket(self, &ip_repr, &tcp_repr) {
             if tcp_socket.accepts(self, &ip_repr, &tcp_repr) {
                 return tcp_socket
                     .process(self, &ip_repr, &tcp_repr)

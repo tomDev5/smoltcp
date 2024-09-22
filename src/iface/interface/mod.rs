@@ -24,8 +24,9 @@ mod tcp;
 #[cfg(any(feature = "socket-udp", feature = "socket-dns"))]
 mod udp;
 
-use super::packet::*;
+use super::{packet::*, SocketContainer};
 
+use core::ops::DerefMut;
 use core::result::Result;
 use heapless::Vec;
 
@@ -432,7 +433,7 @@ impl Interface {
         &mut self,
         timestamp: Instant,
         device: &mut (impl Device + ?Sized),
-        sockets: &mut SocketSet<'_>,
+        sockets: &mut SocketContainer,
     ) -> PollResult {
         self.inner.now = timestamp;
 
@@ -469,7 +470,7 @@ impl Interface {
         &mut self,
         timestamp: Instant,
         device: &mut (impl Device + ?Sized),
-        sockets: &mut SocketSet<'_>,
+        sockets: &mut SocketContainer,
     ) -> PollResult {
         self.inner.now = timestamp;
 
@@ -499,11 +500,11 @@ impl Interface {
     /// - whether the state of any socket might have changed.
     ///
     /// Since it processes at most one packet, this is guaranteed to always perform a bounded amount of work.
-    pub fn poll_ingress_single(
+    pub fn poll_ingress_single<'a>(
         &mut self,
         timestamp: Instant,
         device: &mut (impl Device + ?Sized),
-        sockets: &mut SocketSet<'_>,
+        sockets: &'a mut SocketContainer,
     ) -> PollIngressSingleResult {
         self.inner.now = timestamp;
 
@@ -566,7 +567,7 @@ impl Interface {
     fn socket_ingress(
         &mut self,
         device: &mut (impl Device + ?Sized),
-        sockets: &mut SocketSet<'_>,
+        sockets: &mut SocketContainer,
     ) -> PollIngressSingleResult {
         let Some((rx_token, tx_token)) = device.receive(self.inner.now) else {
             return PollIngressSingleResult::None;
@@ -639,7 +640,7 @@ impl Interface {
     fn socket_egress(
         &mut self,
         device: &mut (impl Device + ?Sized),
-        sockets: &mut SocketSet<'_>,
+        sockets: &mut SocketContainer,
     ) -> PollResult {
         let _caps = device.capabilities();
 
@@ -649,11 +650,11 @@ impl Interface {
         }
 
         let mut result = PollResult::None;
-        for item in sockets.items_mut() {
-            if !item
-                .meta
-                .egress_permitted(self.inner.now, |ip_addr| self.inner.has_neighbor(&ip_addr))
-            {
+        for _ in 0..sockets.dirty_sockets_capacity() {
+            let Some((mut socket, meta)) = sockets.next_dirty() else {
+                break;
+            };
+            if !meta.egress_permitted(self.inner.now, |ip_addr| self.inner.has_neighbor(&ip_addr)) {
                 continue;
             }
 
@@ -674,7 +675,7 @@ impl Interface {
                 Ok(())
             };
 
-            let result = match &mut item.socket {
+            let result = match socket.deref_mut() {
                 #[cfg(feature = "socket-raw")]
                 Socket::Raw(socket) => socket.dispatch(&mut self.inner, |inner, (ip, raw)| {
                     respond(
@@ -743,7 +744,7 @@ impl Interface {
                     // requests from the socket. However, without an additional rate limiting
                     // mechanism, we would spin on every socket that has yet to discover its
                     // neighbor.
-                    item.meta.neighbor_missing(
+                    meta.neighbor_missing(
                         self.inner.now,
                         neighbor_addr.expect("non-IP response packet"),
                     );
@@ -845,7 +846,7 @@ impl InterfaceInner {
     #[cfg(feature = "medium-ip")]
     fn process_ip<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         meta: PacketMeta,
         ip_payload: &'frame [u8],
         frag: &'frame mut FragmentsBuffer,
@@ -867,19 +868,16 @@ impl InterfaceInner {
     }
 
     #[cfg(feature = "socket-raw")]
-    fn raw_socket_filter(
+    fn raw_socket_filter<'a: 'b, 'b>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &'b mut SocketContainer,
         ip_repr: &IpRepr,
         ip_payload: &[u8],
     ) -> bool {
         let mut handled_by_raw_socket = false;
 
         // Pass every IP packet to all raw sockets we have registered.
-        for raw_socket in sockets
-            .items_mut()
-            .filter_map(|i| raw::Socket::downcast_mut(&mut i.socket))
-        {
+        if let Some(mut raw_socket) = sockets.get_raw_socket(ip_repr) {
             if raw_socket.accepts(ip_repr) {
                 raw_socket.process(self, ip_repr, ip_payload);
                 handled_by_raw_socket = true;

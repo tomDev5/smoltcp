@@ -2,7 +2,7 @@ mod utils;
 
 use log::debug;
 
-use smoltcp::iface::{Config, Interface, SocketSet};
+use smoltcp::iface::{Config, Interface, SocketContainer};
 use smoltcp::phy::{Device, Loopback, Medium};
 use smoltcp::socket::tcp;
 use smoltcp::time::Instant;
@@ -50,10 +50,9 @@ fn main() {
         tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer)
     };
 
-    let mut sockets: [_; 2] = Default::default();
-    let mut sockets = SocketSet::new(&mut sockets[..]);
-    let server_handle = sockets.add(server_socket);
-    let client_handle = sockets.add(client_socket);
+    let mut sockets = SocketContainer::new(vec![], vec![]);
+    let server_handle = sockets.add(server_socket).unwrap();
+    let client_handle = sockets.add(client_socket).unwrap();
 
     let start_time = Instant::now();
 
@@ -63,7 +62,7 @@ fn main() {
     while processed < 1024 * 1024 * 1024 {
         iface.poll(Instant::now(), &mut device, &mut sockets);
 
-        let socket = sockets.get_mut::<tcp::Socket>(server_handle);
+        let mut socket = sockets.get_mut::<tcp::Socket>(server_handle).unwrap();
         if !socket.is_active() && !socket.is_listening() && !did_listen {
             debug!("listening");
             socket.listen(1234).unwrap();
@@ -76,7 +75,9 @@ fn main() {
             processed += received;
         }
 
-        let socket = sockets.get_mut::<tcp::Socket>(client_handle);
+        drop(socket);
+
+        let mut socket = sockets.get_mut::<tcp::Socket>(client_handle).unwrap();
         let cx = iface.context();
         if !socket.is_open() && !did_connect {
             debug!("connecting");

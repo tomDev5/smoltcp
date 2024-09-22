@@ -1,6 +1,6 @@
 mod utils;
 use log::debug;
-use smoltcp::iface::{Config, Interface, SocketSet};
+use smoltcp::iface::{Config, Interface, SocketContainer};
 use smoltcp::phy::{Device, Loopback, Medium};
 use smoltcp::socket::tcp;
 use smoltcp::time::Instant;
@@ -30,7 +30,7 @@ fn main() {
             .unwrap();
     });
     // Create sockets
-    let mut sockets = SocketSet::new(Vec::new());
+    let mut sockets = SocketContainer::new(Vec::new(), Vec::new());
     let mut server_handles = Vec::new();
     let mut client_handles = Vec::new();
     for client_port in 0..NUM_PAIRS {
@@ -51,15 +51,15 @@ fn main() {
                 .unwrap();
             socket
         };
-        server_handles.push(sockets.add(server_socket));
-        client_handles.push(sockets.add(client_socket));
+        server_handles.push(sockets.add(server_socket).unwrap());
+        client_handles.push(sockets.add(client_socket).unwrap());
     }
     let start_time = Instant::now();
     let mut processed = 0;
     while processed < 1024 * 1024 * 1024 {
         iface.poll(Instant::now(), &mut device, &mut sockets);
         for server_handle in &server_handles {
-            let socket = sockets.get_mut::<tcp::Socket>(*server_handle);
+            let mut socket = sockets.get_mut::<tcp::Socket>(*server_handle).unwrap();
             while socket.can_recv() {
                 let received = socket.recv(|buffer| (buffer.len(), buffer.len())).unwrap();
                 debug!("got {:?}", received,);
@@ -67,7 +67,7 @@ fn main() {
             }
         }
         for client_handle in &client_handles {
-            let socket = sockets.get_mut::<tcp::Socket>(*client_handle);
+            let mut socket = sockets.get_mut::<tcp::Socket>(*client_handle).unwrap();
             while socket.can_send() {
                 debug!("sending");
                 socket.send(|buffer| (buffer.len(), ())).unwrap();

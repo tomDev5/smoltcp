@@ -55,11 +55,11 @@ impl<'a> SocketSet<'a> {
         SocketSet { sockets }
     }
 
-    /// Add a socket to the set, and return its handle.
+    /// Add a generic socket to the set, and return its handle.
     ///
     /// # Panics
     /// This function panics if the storage is fixed-size (not a `Vec`) and is full.
-    pub fn add<T: AnySocket<'a>>(&mut self, socket: T) -> SocketHandle {
+    pub(crate) fn add_upcast(&mut self, socket: Socket<'a>) -> SocketHandle {
         fn put<'a>(index: usize, slot: &mut SocketStorage<'a>, socket: Socket<'a>) -> SocketHandle {
             net_trace!("[{}]: adding", index);
             let handle = SocketHandle(index);
@@ -70,8 +70,6 @@ impl<'a> SocketSet<'a> {
             };
             handle
         }
-
-        let socket = socket.upcast();
 
         for (index, slot) in self.sockets.iter_mut().enumerate() {
             if slot.inner.is_none() {
@@ -90,16 +88,49 @@ impl<'a> SocketSet<'a> {
         }
     }
 
+    /// Add a socket to the set, and return its handle.
+    ///
+    /// # Panics
+    /// This function panics if the storage is fixed-size (not a `Vec`) and is full.
+    pub fn add<T: AnySocket<'a>>(&mut self, socket: T) -> SocketHandle {
+        self.add_upcast(socket.upcast())
+    }
+
+    /// Get a generic socket from the set by its handle, as mutable.
+    ///
+    /// # Panics
+    /// This function may panic if the handle does not belong to this socket set
+    /// or the socket has the wrong type.
+    pub(crate) fn get_upcast(&self, handle: SocketHandle) -> &Socket<'a> {
+        match self.sockets[handle.0].inner.as_ref() {
+            Some(item) => &item.socket,
+            None => panic!("handle does not refer to a valid socket"),
+        }
+    }
+
     /// Get a socket from the set by its handle, as mutable.
     ///
     /// # Panics
     /// This function may panic if the handle does not belong to this socket set
     /// or the socket has the wrong type.
     pub fn get<T: AnySocket<'a>>(&self, handle: SocketHandle) -> &T {
-        match self.sockets[handle.0].inner.as_ref() {
-            Some(item) => {
-                T::downcast(&item.socket).expect("handle refers to a socket of a wrong type")
-            }
+        match T::downcast(self.get_upcast(handle)) {
+            Some(item) => item,
+            None => panic!("handle does not refer to a valid socket"),
+        }
+    }
+
+    /// Get a generic mutable socket from the set by its handle, as mutable.
+    ///
+    /// # Panics
+    /// This function may panic if the handle does not belong to this socket set
+    /// or the socket has the wrong type.
+    pub(crate) fn get_mut_upcast<'b>(&'b mut self, handle: SocketHandle) -> &'b mut Socket<'a>
+    where
+        'a: 'b,
+    {
+        match self.sockets[handle.0].inner.as_mut() {
+            Some(item) => &mut item.socket,
             None => panic!("handle does not refer to a valid socket"),
         }
     }
@@ -110,11 +141,17 @@ impl<'a> SocketSet<'a> {
     /// This function may panic if the handle does not belong to this socket set
     /// or the socket has the wrong type.
     pub fn get_mut<T: AnySocket<'a>>(&mut self, handle: SocketHandle) -> &mut T {
-        match self.sockets[handle.0].inner.as_mut() {
-            Some(item) => T::downcast_mut(&mut item.socket)
-                .expect("handle refers to a socket of a wrong type"),
+        match T::downcast_mut(self.get_mut_upcast(handle)) {
+            Some(item) => item,
             None => panic!("handle does not refer to a valid socket"),
         }
+    }
+
+    pub(crate) fn get_mut_item<'b>(&'b mut self, handle: SocketHandle) -> &'b mut Item<'a>
+    where
+        'a: 'b,
+    {
+        self.sockets[handle.0].inner.as_mut().unwrap()
     }
 
     /// Remove a socket from the set, without changing its state.
@@ -147,5 +184,10 @@ impl<'a> SocketSet<'a> {
     /// Iterate every socket in this set.
     pub(crate) fn items_mut(&mut self) -> impl Iterator<Item = &mut Item<'a>> + '_ {
         self.sockets.iter_mut().filter_map(|x| x.inner.as_mut())
+    }
+
+    /// Get capacity of the underlying storage
+    pub fn capacity(&self) -> usize {
+        self.sockets.len()
     }
 }

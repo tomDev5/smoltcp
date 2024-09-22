@@ -185,6 +185,8 @@ pub struct Socket<'a> {
     /// Waker registration
     #[cfg(feature = "async")]
     waker: WakerRegistration,
+
+    on_dirty_list: bool,
 }
 
 /// DHCP client socket.
@@ -212,6 +214,7 @@ impl<'a> Socket<'a> {
             waker: WakerRegistration::new(),
             server_port: DHCP_SERVER_PORT,
             client_port: DHCP_CLIENT_PORT,
+            on_dirty_list: false,
         }
     }
 
@@ -299,6 +302,10 @@ impl<'a> Socket<'a> {
             .min(state.expires_at),
         };
         PollAt::Time(t)
+    }
+
+    pub(crate) fn accepts(&self, udp_repr: &UdpRepr) -> bool {
+        udp_repr.src_port == self.server_port && udp_repr.dst_port == self.client_port
     }
 
     pub(crate) fn process(
@@ -773,6 +780,19 @@ impl<'a> Socket<'a> {
     #[cfg(feature = "async")]
     pub fn register_waker(&mut self, waker: &Waker) {
         self.waker.register(waker)
+    }
+
+    pub(crate) fn is_on_dirty_list(&self) -> bool {
+        self.on_dirty_list
+    }
+
+    pub(crate) fn set_on_dirty_list(&mut self, val: bool) {
+        self.on_dirty_list = val
+    }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        // TODO: proper implementation
+        true
     }
 }
 

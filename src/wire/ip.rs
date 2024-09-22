@@ -392,8 +392,9 @@ impl defmt::Format for Cidr {
 /// in order to listen on a given port on any address.
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Endpoint {
-    pub addr: Address,
+    // WARNING: The order of the fields is important for correct Ord derivatoin!
     pub port: u16,
+    pub addr: Address,
 }
 
 impl Endpoint {

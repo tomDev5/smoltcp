@@ -185,7 +185,7 @@ impl InterfaceInner {
 
     pub(super) fn process_ipv6<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         meta: PacketMeta,
         source_hardware_addr: HardwareAddress,
         ipv6_packet: &Ipv6Packet<&'frame [u8]>,
@@ -226,6 +226,7 @@ impl InterfaceInner {
 
         #[cfg(feature = "socket-raw")]
         let handled_by_raw_socket = self.raw_socket_filter(sockets, &ipv6_repr.into(), ip_payload);
+
         #[cfg(not(feature = "socket-raw"))]
         let handled_by_raw_socket = false;
 
@@ -309,7 +310,7 @@ impl InterfaceInner {
     /// function.
     fn process_nxt_hdr<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         meta: PacketMeta,
         ipv6_repr: Ipv6Repr,
         nxt_hdr: IpProtocol,
@@ -352,7 +353,7 @@ impl InterfaceInner {
 
     pub(super) fn process_icmpv6<'frame>(
         &mut self,
-        _sockets: &mut SocketSet,
+        sockets: &mut SocketContainer,
         ip_repr: Ipv6Repr,
         ip_payload: &'frame [u8],
     ) -> Option<Packet<'frame>> {
@@ -369,15 +370,9 @@ impl InterfaceInner {
 
         #[cfg(feature = "socket-icmp")]
         {
-            use crate::socket::icmp::Socket as IcmpSocket;
-            for icmp_socket in _sockets
-                .items_mut()
-                .filter_map(|i| IcmpSocket::downcast_mut(&mut i.socket))
-            {
-                if icmp_socket.accepts_v6(self, &ip_repr, &icmp_repr) {
-                    icmp_socket.process_v6(self, &ip_repr, &icmp_repr);
-                    handled_by_icmp_socket = true;
-                }
+            if let Some(mut icmp_socket) = sockets.get_icmpv6_socket(self, &ip_repr, &icmp_repr) {
+                icmp_socket.process_v6(self, &ip_repr, &icmp_repr);
+                handled_by_icmp_socket = true;
             }
         }
 

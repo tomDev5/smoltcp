@@ -88,6 +88,57 @@ impl<'a> Socket<'a> {
             Socket::Dns(s) => s.poll_at(cx),
         }
     }
+
+    pub(crate) fn is_on_dirty_list(&self) -> bool {
+        match self {
+            #[cfg(feature = "socket-raw")]
+            Socket::Raw(s) => s.is_on_dirty_list(),
+            #[cfg(feature = "socket-icmp")]
+            Socket::Icmp(s) => s.is_on_dirty_list(),
+            #[cfg(feature = "socket-udp")]
+            Socket::Udp(s) => s.is_on_dirty_list(),
+            #[cfg(feature = "socket-tcp")]
+            Socket::Tcp(s) => s.is_on_dirty_list(),
+            #[cfg(feature = "socket-dhcpv4")]
+            Socket::Dhcpv4(s) => s.is_on_dirty_list(),
+            #[cfg(feature = "socket-dns")]
+            Socket::Dns(s) => s.is_on_dirty_list(),
+        }
+    }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        match self {
+            #[cfg(feature = "socket-raw")]
+            Socket::Raw(s) => s.is_dirty(),
+            #[cfg(feature = "socket-icmp")]
+            Socket::Icmp(s) => s.is_dirty(),
+            #[cfg(feature = "socket-udp")]
+            Socket::Udp(s) => s.is_dirty(),
+            #[cfg(feature = "socket-tcp")]
+            Socket::Tcp(s) => s.is_dirty(),
+            #[cfg(feature = "socket-dhcpv4")]
+            Socket::Dhcpv4(s) => s.is_dirty(),
+            #[cfg(feature = "socket-dns")]
+            Socket::Dns(s) => s.is_dirty(),
+        }
+    }
+
+    pub(crate) fn set_on_dirty_list(&mut self, val: bool) {
+        match self {
+            #[cfg(feature = "socket-raw")]
+            Socket::Raw(s) => s.set_on_dirty_list(val),
+            #[cfg(feature = "socket-icmp")]
+            Socket::Icmp(s) => s.set_on_dirty_list(val),
+            #[cfg(feature = "socket-udp")]
+            Socket::Udp(s) => s.set_on_dirty_list(val),
+            #[cfg(feature = "socket-tcp")]
+            Socket::Tcp(s) => s.set_on_dirty_list(val),
+            #[cfg(feature = "socket-dhcpv4")]
+            Socket::Dhcpv4(s) => s.set_on_dirty_list(val),
+            #[cfg(feature = "socket-dns")]
+            Socket::Dns(s) => s.set_on_dirty_list(val),
+        }
+    }
 }
 
 /// A conversion trait for network sockets.

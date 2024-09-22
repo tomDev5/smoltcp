@@ -14,6 +14,12 @@ mod rpl;
 mod socket_meta;
 mod socket_set;
 
+mod dispatch;
+mod socket_container;
+mod socket_tracker;
+
+pub use self::socket_container::Container as SocketContainer;
+
 mod packet;
 
 #[cfg(feature = "multicast")]
@@ -23,4 +29,5 @@ pub use self::interface::{
 };
 
 pub use self::route::{Route, RouteTableFull, Routes};
-pub use self::socket_set::{SocketHandle, SocketSet, SocketStorage};
+pub(crate) use self::socket_set::SocketSet;
+pub use self::socket_set::{SocketHandle, SocketStorage};

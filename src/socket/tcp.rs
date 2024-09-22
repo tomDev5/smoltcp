@@ -492,6 +492,8 @@ pub struct Socket<'a> {
     rx_waker: WakerRegistration,
     #[cfg(feature = "async")]
     tx_waker: WakerRegistration,
+
+    on_dirty_list: bool,
 }
 
 const DEFAULT_MSS: usize = 536;
@@ -554,6 +556,8 @@ impl<'a> Socket<'a> {
             rx_waker: WakerRegistration::new(),
             #[cfg(feature = "async")]
             tx_waker: WakerRegistration::new(),
+
+            on_dirty_list: false,
         }
     }
 
@@ -2548,6 +2552,22 @@ impl<'a> Socket<'a> {
                 .iter()
                 .min()
                 .unwrap_or(&PollAt::Ingress)
+        }
+    }
+
+    pub(crate) fn is_on_dirty_list(&self) -> bool {
+        self.on_dirty_list
+    }
+
+    pub(crate) fn set_on_dirty_list(&mut self, val: bool) {
+        self.on_dirty_list = val
+    }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        // TODO: proper implementation
+        match self.state {
+            State::Closed | State::Listen | State::FinWait2 => false,
+            _ => true,
         }
     }
 }

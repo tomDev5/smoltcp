@@ -145,6 +145,8 @@ pub struct Socket<'a> {
 
     /// The time-to-live (IPv4) or hop limit (IPv6) value used in outgoing packets.
     hop_limit: Option<u8>,
+
+    on_dirty_list: bool,
 }
 
 impl<'a> Socket<'a> {
@@ -161,6 +163,7 @@ impl<'a> Socket<'a> {
             servers: Vec::from_slice(truncated_servers).unwrap(),
             queries: queries.into(),
             hop_limit: None,
+            on_dirty_list: false,
         }
     }
 
@@ -664,6 +667,18 @@ impl<'a> Socket<'a> {
             })
             .min()
             .unwrap_or(PollAt::Ingress)
+    }
+
+    pub(crate) fn is_on_dirty_list(&self) -> bool {
+        self.on_dirty_list
+    }
+
+    pub(crate) fn set_on_dirty_list(&mut self, val: bool) {
+        self.on_dirty_list = val
+    }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        !self.queries.is_empty()
     }
 }
 
