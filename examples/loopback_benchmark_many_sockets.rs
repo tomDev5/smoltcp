@@ -5,7 +5,7 @@ use smoltcp::phy::{Device, Loopback, Medium};
 use smoltcp::socket::tcp;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr};
-const NUM_PAIRS: u16 = 256;
+const NUM_PAIRS: u16 = 1024;
 fn main() {
     let device = Loopback::new(Medium::Ethernet);
     let mut device = {

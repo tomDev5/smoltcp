@@ -34,7 +34,10 @@ pub type WithHandle<'a, T> = Option<(&'a mut T, SocketHandle)>;
 pub struct DispatchTable {}
 
 #[derive(Debug)]
-pub enum Error {}
+pub enum AddError {}
+
+#[derive(Debug)]
+pub enum RemoveError {}
 
 impl DispatchTable {
     pub(crate) fn new() -> DispatchTable {
@@ -45,7 +48,7 @@ impl DispatchTable {
         &mut self,
         _socket: &Socket,
         _handle: SocketHandle,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AddError> {
         Ok(())
     }
 
@@ -55,7 +58,7 @@ impl DispatchTable {
         &mut self,
         _udp_socket: &UdpSocket,
         _handle: SocketHandle,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AddError> {
         Ok(())
     }
 
@@ -65,7 +68,7 @@ impl DispatchTable {
         &mut self,
         _raw_socket: &RawSocket,
         _handle: SocketHandle,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AddError> {
         Ok(())
     }
 
@@ -75,7 +78,7 @@ impl DispatchTable {
         &mut self,
         _tcp_socket: &TcpSocket,
         _handle: SocketHandle,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AddError> {
         Ok(())
     }
 
@@ -83,25 +86,25 @@ impl DispatchTable {
         &mut self,
         _socket: &Socket,
         _handle: SocketHandle,
-    ) -> Result<(), Error> {
+    ) -> Result<(), RemoveError> {
         Ok(())
     }
 
     #[allow(dead_code)]
     #[cfg(feature = "socket-udp")]
-    pub(crate) fn remove_udp_socket(&mut self, _handle: SocketHandle) -> Result<(), Error> {
+    pub(crate) fn remove_udp_socket(&mut self, _handle: SocketHandle) -> Result<(), RemoveError> {
         Ok(())
     }
 
     #[allow(dead_code)]
     #[cfg(feature = "socket-raw")]
-    pub(crate) fn remove_raw_socket(&mut self, _handle: SocketHandle) -> Result<(), Error> {
+    pub(crate) fn remove_raw_socket(&mut self, _handle: SocketHandle) -> Result<(), RemoveError> {
         Ok(())
     }
 
     #[allow(dead_code)]
     #[cfg(feature = "socket-tcp")]
-    pub(crate) fn remove_tcp_socket(&mut self, _handle: SocketHandle) -> Result<(), Error> {
+    pub(crate) fn remove_tcp_socket(&mut self, _handle: SocketHandle) -> Result<(), RemoveError> {
         Ok(())
     }
 

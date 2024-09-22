@@ -68,7 +68,7 @@ impl Container {
     pub fn add_upcast(
         &mut self,
         socket: Socket<'static>,
-    ) -> Result<SocketHandle, super::dispatch::Error> {
+    ) -> Result<SocketHandle, super::dispatch::AddError> {
         let handle = self.set.add_upcast(socket);
         while self.set.capacity() > self.dirty_sockets.capacity() {
             self.dirty_sockets.expand_storage();
@@ -85,7 +85,7 @@ impl Container {
     pub fn add<T: AnySocket<'static>>(
         &mut self,
         socket: T,
-    ) -> Result<SocketHandle, super::dispatch::Error> {
+    ) -> Result<SocketHandle, super::dispatch::AddError> {
         self.add_upcast(socket.upcast())
     }
 
